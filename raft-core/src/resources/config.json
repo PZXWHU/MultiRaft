@@ -1,0 +1,11 @@
+{
+  "nodeId" : 1,
+  "raftHome" : "/home/raft",
+  "clusterAddress" : {
+      "1" : "127.0.0.1:8080",
+      "2" : "127.0.0.1:8080"
+  },
+  "electionTimeoutMilliseconds": 6000
+
+
+}
