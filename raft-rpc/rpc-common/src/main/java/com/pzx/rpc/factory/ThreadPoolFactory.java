@@ -29,7 +29,7 @@ public class ThreadPoolFactory {
         if (scheduledThreadPool == null){
             synchronized (ThreadPoolFactory.class){
                 if (scheduledThreadPool == null)
-                    scheduledThreadPool = Executors.newSingleThreadScheduledExecutor();
+                    scheduledThreadPool = Executors.newScheduledThreadPool(2);
             }
         }
         return scheduledThreadPool;

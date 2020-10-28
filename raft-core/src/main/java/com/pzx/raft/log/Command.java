@@ -12,14 +12,13 @@ import java.util.Objects;
 @Builder
 @ToString
 @EqualsAndHashCode
+@NoArgsConstructor
+@AllArgsConstructor
 public class Command {
 
-    private final String key;
+    private String key;
 
-    private final Object value;
+    private Object value;
 
-    public Command(String key, Object value) {
-        this.key = key;
-        this.value = value;
-    }
+
 }

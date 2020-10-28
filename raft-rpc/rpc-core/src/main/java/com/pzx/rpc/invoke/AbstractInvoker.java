@@ -64,7 +64,7 @@ public abstract class AbstractInvoker implements InvocationHandler {
             CompletableFuture completableFuture;
             if ((completableFuture = RpcInvokeContext.removeUncompletedFuture(rpcRequest.getRequestId())) != null){
                 completableFuture.completeExceptionally(new RpcException(RpcError.RPC_INVOKER_TIMEOUT));
-                logger.error("Rpc调用超时：" + rpcRequest);
+                logger.debug("Rpc调用超时：" + rpcRequest);
             }
         }, timeout, TimeUnit.MILLISECONDS);
     }

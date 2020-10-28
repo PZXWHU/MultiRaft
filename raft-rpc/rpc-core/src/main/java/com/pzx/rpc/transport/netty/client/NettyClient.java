@@ -56,23 +56,21 @@ public class NettyClient implements RpcClient {
 
         CompletableFuture<RpcResponse> resultFuture = new CompletableFuture<>();
         RpcInvokeContext.putUncompletedFuture(rpcRequest.getRequestId(), resultFuture);
-
+        //异步发送
         AsyncRuntime.getAsyncThreadPool().submit(()->{
             InetSocketAddress requestAddress = serviceRegistry != null ? serviceRegistry.lookupService(rpcRequest.getInterfaceName()) : serverAddress;
             try {
                 Channel channel = ChannelPool.get(requestAddress, rpcSerDe);
                 channel.writeAndFlush(rpcRequest).addListener((ChannelFuture future1) -> {
                     if(future1.isSuccess()) {
-                        logger.info(String.format("客户端发送消息: %s", rpcRequest.toString()));
+                        logger.debug(String.format("客户端发送消息: %s", rpcRequest.toString()));
                     } else {
                         future1.channel().close();
-                        RpcInvokeContext.completeFutureExceptionally(rpcRequest.getRequestId(), new RpcException(future1.cause()));
-                        //logger.error("发送消息时有错误发生: ", future1.cause());
+                        RpcInvokeContext.completeFutureExceptionally(rpcRequest.getRequestId(), future1.cause());
                     }
                 });
             } catch (InterruptedException | RpcConnectException e) {
-                RpcInvokeContext.completeFutureExceptionally(rpcRequest.getRequestId(), new RpcException(e));
-                //logger.error("发送消息时有错误发生: ", e);
+                RpcInvokeContext.completeFutureExceptionally(rpcRequest.getRequestId(),  e);
             }
         });
 

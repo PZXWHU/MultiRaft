@@ -1,6 +1,8 @@
 package com.pzx.rpc.transport.netty.client;
 
+import com.pzx.rpc.enumeration.RpcError;
 import com.pzx.rpc.exception.RpcConnectException;
+import com.pzx.rpc.factory.ThreadPoolFactory;
 import com.pzx.rpc.serde.RpcSerDe;
 import com.pzx.rpc.transport.netty.codec.ProtocolNettyDecoder;
 import com.pzx.rpc.transport.netty.codec.ProtocolNettyEncoder;
@@ -27,6 +29,28 @@ public class ChannelPool {
     private static EventLoopGroup eventLoopGroup;
     private static Map<String, Channel> channels = new ConcurrentHashMap<>();
 
+    /*
+    private static Map<String, InetSocketAddress> blackList = new ConcurrentHashMap<>();
+    static {
+        ThreadPoolFactory.getScheduledThreadPool().scheduleWithFixedDelay(() -> {
+            for (Map.Entry<String, InetSocketAddress> entry : blackList.entrySet()) {
+                bootstrap.connect(entry.getValue()).addListener(new ChannelFutureListener() {
+                    @Override
+                    public void operationComplete(ChannelFuture channelFuture) throws Exception {
+                        if (channelFuture.isSuccess()) {
+                            channels.put(entry.getKey(), channelFuture.channel());
+                            blackList.remove(entry.getKey());
+                        } else {
+                            channelFuture.channel().close();
+                        }
+                    }
+                });
+            }
+        }, 4,4, TimeUnit.SECONDS);
+    }
+
+     */
+
     /**
      * 当连接失败时，返回null
      * @param inetSocketAddress
@@ -40,6 +64,12 @@ public class ChannelPool {
 
         //当出现key相同时，由于字符串常量池的存在，相同key会是同一个对象
         synchronized (key){
+            /*
+            if (blackList.containsKey(key)){
+                throw new RpcConnectException(RpcError.BAD_CONNECTION);
+            }
+             */
+
             if (channels.containsKey(key)) {
                 Channel channel = channels.get(key);
                 if(channels != null && channel.isActive()) {
@@ -67,6 +97,7 @@ public class ChannelPool {
                     if (channelFuture.isSuccess()){
                         channels.put(key, channelFuture.channel());
                     }else {
+                        //blackList.put(key, inetSocketAddress);
                         channelFuture.channel().close();
                         connectThrowable.initCause(channelFuture.cause());
                     }
@@ -75,7 +106,7 @@ public class ChannelPool {
             });
             countDownLatch.await();
             if (channels.get(key) == null)
-                throw new RpcConnectException(connectThrowable);
+                throw new RpcConnectException(connectThrowable.getCause().getMessage());
         }
 
         return channels.get(key);

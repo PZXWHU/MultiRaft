@@ -74,7 +74,6 @@ public class ProxyConfig {
         Preconditions.checkArgument(directServerUrl == null ,
                 "directServerUrl and registryCenterUrl can not be set at the same time!");
         this.registryCenterUrl = registryCenterUrl;
-
         return this;
     }
 

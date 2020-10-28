@@ -56,7 +56,7 @@ public class NettyServer extends AbstractRpcServer {
 
         EventLoopGroup bossGroup = new NioEventLoopGroup(1);
         EventLoopGroup workerGroup = new NioEventLoopGroup();
-        EventExecutorGroup businessGroup = new DefaultEventExecutorGroup(2);//业务线程池
+        EventExecutorGroup businessGroup = new DefaultEventExecutorGroup(10);//业务线程池
         try {
             ServerBootstrap serverBootstrap = new ServerBootstrap();
             serverBootstrap.group(bossGroup, workerGroup)

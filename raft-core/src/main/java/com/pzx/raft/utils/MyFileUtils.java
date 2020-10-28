@@ -4,6 +4,7 @@ import com.sun.xml.internal.ws.policy.privateutil.PolicyUtils;
 import org.apache.commons.io.FileUtils;
 
 import java.io.*;
+import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.List;
@@ -49,9 +50,15 @@ public class MyFileUtils {
     }
 
 
-    public static void createNewFile(String filePath)throws IOException {
+    public static void createFileIfNotExist(String filePath)throws IOException {
         File file = new File(filePath);
-        file.createNewFile();
+        if (!file.exists())
+            file.createNewFile();
+    }
+
+    public static String readFileToString(String filePath) throws IOException{
+        File file = new File(filePath);
+        return FileUtils.readFileToString(file, "utf-8");
     }
 
 

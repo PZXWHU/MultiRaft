@@ -1,5 +1,7 @@
 package com.pzx.rpc.exception;
 
+import com.pzx.rpc.enumeration.RpcError;
+
 public class RpcConnectException extends Exception {
 
     public RpcConnectException() {
@@ -7,6 +9,10 @@ public class RpcConnectException extends Exception {
 
     public RpcConnectException(String message) {
         super(message);
+    }
+
+    public RpcConnectException(RpcError rpcError){
+        this(rpcError.getMessage());
     }
 
     public RpcConnectException(String message, Throwable cause) {

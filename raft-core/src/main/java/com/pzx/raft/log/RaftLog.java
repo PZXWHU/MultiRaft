@@ -2,6 +2,8 @@ package com.pzx.raft.log;
 
 import com.pzx.raft.node.NodePersistMetaData;
 
+import java.util.concurrent.locks.Lock;
+
 /**
  * @author PZX
  */
@@ -11,7 +13,7 @@ public interface RaftLog {
      * 为logEntry赋值Index，并写入日志
      * @param logEntry
      */
-    void write(LogEntry logEntry);
+    long write(LogEntry logEntry);
 
     /**
      * 读取指定位置的logEntry
@@ -46,9 +48,11 @@ public interface RaftLog {
 
     /**
      * 获取最大的Index对应的日志条目
-     * @return
+     * @return return null if the last LogEntry is not in RaftLog but in Snapshot
      */
-    LogEntry getLast();
+    default LogEntry getLast(){
+        return read(getLastIndex());
+    }
 
     /**
      * 获取日志的持久化的节点元数据
@@ -62,5 +66,8 @@ public interface RaftLog {
      * @return
      */
     void updateNodePersistMetaData(NodePersistMetaData other);
+
+
+    Lock getLock();
 
 }

@@ -43,8 +43,9 @@ public class RocksDBRaftLog implements RaftLog {
      * @param logEntry
      */
     @Override
-    public void write(LogEntry logEntry) {
+    public long write(LogEntry logEntry) {
         boolean success = false;
+        long lastIndex;
         lock.lock();
         try {
             logEntry.setIndex(getLastIndex() + 1);
@@ -57,8 +58,10 @@ public class RocksDBRaftLog implements RaftLog {
                 updateLastIndex(logEntry.getIndex());
                 updateTotalSize(getTotalSize() + 1);
             }
+            lastIndex = getLastIndex();
             lock.unlock();
         }
+        return lastIndex;
     }
 
     @Override
@@ -136,18 +139,6 @@ public class RocksDBRaftLog implements RaftLog {
     }
 
     @Override
-    public LogEntry getLast() {
-        lock.lock();
-        LogEntry lastEntry;
-        try {
-            lastEntry = read(getLastIndex());
-        }finally {
-            lock.unlock();
-        }
-        return lastEntry;
-    }
-
-    @Override
     public NodePersistMetaData getNodePersistMetaData() {
         int votedFor = 0;
         long currentTerm = 0l;
@@ -189,6 +180,11 @@ public class RocksDBRaftLog implements RaftLog {
         }finally {
             NodePersistMetaData.LOCK.unlock();
         }
+    }
+
+    @Override
+    public Lock getLock() {
+        return this.lock;
     }
 
     private void updateLastIndex(long index){

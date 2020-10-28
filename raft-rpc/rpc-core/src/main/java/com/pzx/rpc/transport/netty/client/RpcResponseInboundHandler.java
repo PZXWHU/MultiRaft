@@ -21,7 +21,7 @@ public class RpcResponseInboundHandler extends SimpleChannelInboundHandler<RpcRe
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, RpcResponse rpcResponse) throws Exception {
-        logger.info(String.format("客户端接收到消息: %s", rpcResponse));
+        logger.debug(String.format("客户端接收到消息: %s", rpcResponse));
         RpcInvokeContext.completeFuture(rpcResponse);
     }
 

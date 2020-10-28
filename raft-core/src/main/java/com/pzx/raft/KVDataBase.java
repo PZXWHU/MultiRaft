@@ -14,17 +14,13 @@ public interface KVDataBase {
      *
      * @param key
      * @param value
-     * @return the previous value associated with {@code key}, or
-     *         {@code null} if there was no mapping for {@code key}
      */
-    Object set(String key, Object value);
+    boolean set(String key, Object value);
 
     /**
      *
      * @param key
-     * @return the previous value associated with {@code key}, or
-     *         @code null} if there was no mapping for {@code key}
      */
-    Object delete(String key);
+    boolean delete(String key);
 
 }

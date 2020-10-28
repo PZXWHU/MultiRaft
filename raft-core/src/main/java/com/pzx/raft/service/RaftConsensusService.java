@@ -1,9 +1,6 @@
 package com.pzx.raft.service;
 
-import com.pzx.raft.service.entity.AppendEntriesRequest;
-import com.pzx.raft.service.entity.AppendEntriesResponse;
-import com.pzx.raft.service.entity.ReqVoteRequest;
-import com.pzx.raft.service.entity.ReqVoteResponse;
+import com.pzx.raft.service.entity.*;
 
 /**
  * @author PZX
@@ -35,6 +32,13 @@ public interface RaftConsensusService {
      */
     AppendEntriesResponse appendEntries(AppendEntriesRequest request);
 
+
+    /**
+     * 安装快照，当
+     * @param request
+     * @return
+     */
+    InstallSnapshotResponse installSnapshot(InstallSnapshotRequest request);
 
 
 

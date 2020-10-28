@@ -8,12 +8,18 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class MemoryMapStateMachine implements StateMachine {
 
     private static final Logger logger = LoggerFactory.getLogger(MemoryMapStateMachine.class);
+    private static final String SNAPSHOT_DATA_FILENAME = "data";
+
     private ConcurrentHashMap<String, Object> stateMachine;
 
     public MemoryMapStateMachine(){
@@ -46,10 +52,10 @@ public class MemoryMapStateMachine implements StateMachine {
      */
     @Override
     public void writeSnapshot(String snapshotDir) throws IOException {
-        String snapshotDataFile = snapshotDir + File.separator + "data";
+        String snapshotDataFile = snapshotDir + File.separator + SNAPSHOT_DATA_FILENAME;
         MyFileUtils.mkDirIfNotExist(snapshotDir);
         MyFileUtils.deleteFileIfExist(snapshotDataFile);
-        MyFileUtils.createNewFile(snapshotDataFile);
+        MyFileUtils.createFileIfNotExist(snapshotDataFile);
         MyFileUtils.writeObjectToFile(snapshotDataFile, this);
     }
 
@@ -60,7 +66,7 @@ public class MemoryMapStateMachine implements StateMachine {
      */
     @Override
     public void readSnapshot(String snapshotDir) throws IOException {
-        String snapshotDataFile = snapshotDir + File.separator + "data";
+        String snapshotDataFile = snapshotDir + File.separator + SNAPSHOT_DATA_FILENAME;
         if(!new File(snapshotDataFile).exists()){
             logger.info("snapshotDataFile is not exist!");
             return;
@@ -70,17 +76,29 @@ public class MemoryMapStateMachine implements StateMachine {
     }
 
     @Override
+    public Map<String, byte[]> getSnapshotFileData(String snapshotDir) throws IOException {
+        String snapshotDataFile = snapshotDir + File.separator + SNAPSHOT_DATA_FILENAME;
+        Path path = Paths.get(snapshotDataFile);
+        if (!Files.exists(path)) return null;
+        Map<String, byte[]> snapshotData = new HashMap<>(1);
+        snapshotData.put(SNAPSHOT_DATA_FILENAME, Files.readAllBytes(path));
+        return snapshotData;
+    }
+
+    @Override
     public Object get(String key) {
         return stateMachine.get(key);
     }
 
     @Override
-    public Object set(String key, Object value) {
-        return stateMachine.put(key, value);
+    public boolean set(String key, Object value) {
+        stateMachine.put(key, value);
+        return true;
     }
 
     @Override
-    public Object delete(String key) {
-        return stateMachine.remove(key);
+    public boolean delete(String key) {
+        stateMachine.remove(key);
+        return true;
     }
 }

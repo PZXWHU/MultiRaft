@@ -40,6 +40,7 @@ public class ServiceRequestHandler {
             return RpcResponse.fail(rpcRequest.getRequestId(), ResponseCode.METHOD_NOT_FOUND, e.toString());
         }catch (IllegalAccessException | InvocationTargetException e){
             logger.error("服务调用时出错：" + rpcRequest + ":" + e);
+            e.printStackTrace();
             return RpcResponse.fail(rpcRequest.getRequestId(), ResponseCode.METHOD_INVOKER_FAIL, e.toString());
         }
 

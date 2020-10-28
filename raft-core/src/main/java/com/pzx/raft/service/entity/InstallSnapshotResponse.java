@@ -1,20 +1,20 @@
 package com.pzx.raft.service.entity;
 
-import lombok.Builder;
-import lombok.Getter;
-import lombok.ToString;
+import lombok.*;
 
 /**
  * @author PZX
  */
 @Getter
+@Setter
 @Builder
 @ToString
+@NoArgsConstructor
+@AllArgsConstructor
 public class InstallSnapshotResponse {
 
-    private final long currentTerm;
+    private boolean success;
 
-    public InstallSnapshotResponse(long currentTerm) {
-        this.currentTerm = currentTerm;
-    }
+    private long currentTerm;
+
 }

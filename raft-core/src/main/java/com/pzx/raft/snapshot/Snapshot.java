@@ -1,5 +1,7 @@
 package com.pzx.raft.snapshot;
 
+import java.util.Map;
+
 public interface Snapshot {
 
     /**
@@ -13,5 +15,13 @@ public interface Snapshot {
      * @param snapshotDir snapshot数据目录
      */
     void readSnapshot(String snapshotDir)throws Exception;
+
+    /**
+     * 获取所有快照文件数据
+     * @param snapshotDir
+     * @return key：快照文件名称  value：快照文件数据
+     * @throws Exception
+     */
+    Map<String, byte[]> getSnapshotFileData(String snapshotDir)throws Exception;
 
 }

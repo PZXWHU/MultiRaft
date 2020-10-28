@@ -10,6 +10,8 @@ import lombok.*;
 @Builder
 @ToString
 @EqualsAndHashCode
+@NoArgsConstructor
+@AllArgsConstructor
 public class LogEntry {
 
     private long index;
@@ -18,9 +20,4 @@ public class LogEntry {
 
     private Command command;
 
-    public LogEntry(long index, long term, Command command) {
-        this.index = index;
-        this.term = term;
-        this.command = command;
-    }
 }

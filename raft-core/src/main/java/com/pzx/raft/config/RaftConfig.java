@@ -1,16 +1,14 @@
 package com.pzx.raft.config;
 
-import com.google.gson.Gson;
+import com.alibaba.fastjson.JSONObject;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * @author PZX
@@ -22,24 +20,17 @@ public class RaftConfig {
 
     private final static Logger logger = LoggerFactory.getLogger(RaftConfig.class);
 
-    //本节点的id
-    public int nodeId;
+    /*-----------------------------Constant----------------------------------*/
 
     //解析之后的集群地址
     public Map<Integer, String> clusterAddress;
-
-    //raft工作的主目录， raft的主目录只允许根据配置文件设定，后续不能改变，否则重启之后，无法找到快照
-    public String raftHome = ".";
-
-
-    /*-----------------------------Constant----------------------------------*/
 
     // A follower would become a candidate if it doesn't receive any message
     // from the leader in electionTimeoutMs milliseconds
     public int electionTimeoutMilliseconds = 5000;
 
     // A leader sends RPCs at least this often, even if there is no data to send
-    public int heartbeatPeriodMilliseconds = 500;
+    public int heartbeatPeriodMilliseconds = 400;
 
     // snapshot定时器执行间隔
     public int snapshotPeriodSeconds = 3600;
@@ -49,16 +40,13 @@ public class RaftConfig {
 
     public int maxSnapshotBytesPerRequest = 500 * 1024; // 500k
 
-    public int maxLogEntriesPerRequest = 5000;
-
-    // 单个segment文件大小，默认100m
-    public int maxSegmentFileSize = 100 * 1000 * 1000;
+    public int maxLogEntriesPerRequest = 50;
 
     // follower与leader差距在catchupMargin，才可以参与选举和提供服务
     public long catchupMargin = 500;
 
     // replicate最大等待超时时间，单位ms
-    public long maxAwaitTimeout = 1000;
+    public long maxAwaitTimeout = 2000;
 
     // 与其他节点进行同步、选主等操作的线程池大小
     public int raftConsensusThreadNum = 20;
@@ -72,27 +60,22 @@ public class RaftConfig {
     }
 
     public String getSelfAddress(){
-        return clusterAddress.get(nodeId);
+        return clusterAddress.get(NodeConfig.nodeId);
     }
 
-    public List<String> getPeersAddress(){
-        return clusterAddress.entrySet().stream()
-                .filter(entry -> entry.getKey() == nodeId)
-                .map(entry -> entry.getValue())
-                .collect(Collectors.toList());
+    public Map<Integer, String> getPeersAddress(){
+        Map<Integer, String> peersAddress = new HashMap<>(clusterAddress);
+        peersAddress.remove(NodeConfig.nodeId);
+        return peersAddress;
     }
 
     public RaftConfig copy(){
-        Gson gson = new Gson();
-        String jsonString = gson.toJson(this);
-        return gson.fromJson(jsonString, RaftConfig.class);
+        String jsonString = JSONObject.toJSONString(this);
+        RaftConfig copyConfig = JSONObject.parseObject(jsonString, RaftConfig.class);
+        return copyConfig;
     }
 
-    public String getSnapshotDir(){
-        return this.getRaftHome() + File.separator + "snapshot";
-    }
 
-    public String getLogDir(){ return this.getRaftHome() + File.separator + "log"; }
 
 
 }
