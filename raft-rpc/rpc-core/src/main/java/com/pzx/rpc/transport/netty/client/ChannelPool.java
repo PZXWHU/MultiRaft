@@ -29,7 +29,6 @@ public class ChannelPool {
     private static EventLoopGroup eventLoopGroup;
     private static Map<String, Channel> channels = new ConcurrentHashMap<>();
 
-    /*
     private static Map<String, InetSocketAddress> blackList = new ConcurrentHashMap<>();
     static {
         ThreadPoolFactory.getScheduledThreadPool().scheduleWithFixedDelay(() -> {
@@ -46,10 +45,8 @@ public class ChannelPool {
                     }
                 });
             }
-        }, 4,4, TimeUnit.SECONDS);
+        }, 3,3, TimeUnit.SECONDS);
     }
-
-     */
 
     /**
      * 当连接失败时，返回null
@@ -61,14 +58,12 @@ public class ChannelPool {
     public static Channel get(InetSocketAddress inetSocketAddress, RpcSerDe rpcSerDe) throws InterruptedException, RpcConnectException{
         String key = (inetSocketAddress.toString() + rpcSerDe.getCode()).intern();//获取字符串常量池中的对象
 
-
         //当出现key相同时，由于字符串常量池的存在，相同key会是同一个对象
         synchronized (key){
-            /*
+
             if (blackList.containsKey(key)){
                 throw new RpcConnectException(RpcError.BAD_CONNECTION);
             }
-             */
 
             if (channels.containsKey(key)) {
                 Channel channel = channels.get(key);
@@ -97,7 +92,7 @@ public class ChannelPool {
                     if (channelFuture.isSuccess()){
                         channels.put(key, channelFuture.channel());
                     }else {
-                        //blackList.put(key, inetSocketAddress);
+                        blackList.put(key, inetSocketAddress);
                         channelFuture.channel().close();
                         connectThrowable.initCause(channelFuture.cause());
                     }

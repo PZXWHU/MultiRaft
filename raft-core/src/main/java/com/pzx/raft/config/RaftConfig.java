@@ -27,7 +27,7 @@ public class RaftConfig {
 
     // A follower would become a candidate if it doesn't receive any message
     // from the leader in electionTimeoutMs milliseconds
-    public int electionTimeoutMilliseconds = 5000;
+    public int electionTimeoutMilliseconds = 3000;
 
     // A leader sends RPCs at least this often, even if there is no data to send
     public int heartbeatPeriodMilliseconds = 400;
@@ -41,9 +41,6 @@ public class RaftConfig {
     public int maxSnapshotBytesPerRequest = 500 * 1024; // 500k
 
     public int maxLogEntriesPerRequest = 50;
-
-    // follower与leader差距在catchupMargin，才可以参与选举和提供服务
-    public long catchupMargin = 500;
 
     // replicate最大等待超时时间，单位ms
     public long maxAwaitTimeout = 2000;

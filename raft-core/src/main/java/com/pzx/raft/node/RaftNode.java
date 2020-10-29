@@ -102,14 +102,20 @@ public class RaftNode {
     //表示heartbeat的ScheduledFuture
     private ScheduledFuture heartbeatScheduledFuture;
 
+    //RaftNode内部锁，当对节点内部状态变量、日志、状态机、配置进行改变时，必须加锁以保证整体状态的一致性
     private Lock lock = new ReentrantLock();
 
     //commitIndex条件对象，当commitIndex符合条件时，唤醒所有线程
     private Condition commitIndexCondition = lock.newCondition();
 
+    //RaftNode发送心跳、请求投票、安装快照等动作的线程池
     private ExecutorService  executorService ;
 
+    //RaftNode触发心跳、选举的scheduled线程池
     private ScheduledExecutorService scheduledExecutorService;
+
+    //RaftNode提供RPC远程调用的server
+    private RpcServer rpcServer;
 
     public RaftNode(String configPath){
 
@@ -128,6 +134,7 @@ public class RaftNode {
                 60, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
         scheduledExecutorService = ThreadPoolUtils.getScheduledThreadPool();
 
+        rpcServer = initRpcServer();
     }
 
     private void start(){
@@ -137,10 +144,10 @@ public class RaftNode {
         scheduledExecutorService.scheduleWithFixedDelay(()->takeSnapshot(),
                         raftConfig.getSnapshotPeriodSeconds(), raftConfig.getSnapshotPeriodSeconds(), TimeUnit.SECONDS);
         //开启RpcServer
-        startRpcServer();
+        rpcServer.start();//此方法会阻塞，所以必须放在最后
     }
 
-    /**---------------------------------------初始化Rpc----------------------------**/
+    /**---------------------------------------初始化----------------------------**/
 
     private RaftConfig initConfig(String configPath){
         RaftConfig raftConfig;
@@ -157,12 +164,12 @@ public class RaftNode {
         return raftConfig;
     }
 
-   private void startRpcServer(){
+   private RpcServer initRpcServer(){
        InetSocketAddress selfAddress = AddressUtils.stringToInetSocketAddress(raftConfig.getSelfAddress());
        RpcServer rpcServer = new NettyServer.Builder(selfAddress).autoScanService(false).build();
        rpcServer.publishService(new RaftConsensusServiceImpl(this), RaftConsensusService.class.getCanonicalName());
        rpcServer.publishService(new RaftKVClientServiceImpl(this), RaftKVClientService.class.getCanonicalName());
-       rpcServer.start();//此方法会阻塞，所以必须放在最后
+       return rpcServer;
    }
 
 
@@ -610,8 +617,6 @@ public class RaftNode {
         return true;
     }
 
-
-
     /**
      * 每个服务器独立的创建快照，快照内容：
      * 1.已经被提交的日志，即状态机的状态
@@ -733,6 +738,11 @@ public class RaftNode {
         }
     }
 
+    /**----------------------------------集群成员以及配置变更------------------------------**/
+
+    public void applyConfiguration(LogEntry entry) {
+
+    }
 
     /**---------------------------------utils method-------------------------------**/
 
@@ -901,14 +911,12 @@ public class RaftNode {
     public static void checkInstallSnapshot(String[] args){
 
         RaftNode node = new RaftNode(args[0]);
-
+        /*
         ThreadPoolUtils.getScheduledThreadPool().schedule(()->{
             System.out.println("------------------------------------------开始生成快照！---------------------");
             node.takeSnapshot();
         }, 20, TimeUnit.SECONDS);
-
-
-
+         */
         node.start();
 
     }
