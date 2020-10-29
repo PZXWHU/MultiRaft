@@ -29,7 +29,6 @@ public class ServiceRequestHandler {
     }
 
     private RpcResponse invokeTargetMethod(RpcRequest rpcRequest, Object service){
-
         try {
             Method method = service.getClass().getMethod(rpcRequest.getMethodName(), rpcRequest.getParamTypes());
             Object result = method.invoke(service, rpcRequest.getParameters());

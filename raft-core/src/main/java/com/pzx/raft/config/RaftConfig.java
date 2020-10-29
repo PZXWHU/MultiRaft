@@ -7,6 +7,7 @@ import lombok.ToString;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -20,6 +21,9 @@ public class RaftConfig {
 
     private final static Logger logger = LoggerFactory.getLogger(RaftConfig.class);
 
+    private final static Class<RaftConfig> clazz = RaftConfig.class;
+
+    public final static String CLUSTER_ADDRESS_FIELD_NAME = "clusterAddress";
     /*-----------------------------Constant----------------------------------*/
 
     //解析之后的集群地址
@@ -51,6 +55,19 @@ public class RaftConfig {
     // 是否异步写数据；true表示主节点保存后就返回，然后异步同步给从节点；
     // false表示主节点同步给大多数从节点后才返回。
     public boolean asyncWrite = false;
+
+    public void set(String fieldName, Object value){
+        try {
+            Field field = clazz.getDeclaredField(fieldName);
+            field.setAccessible(true);
+            field.set(this, value);
+        }catch (NoSuchFieldException e){
+            logger.error("raftConfig 设置错误，没有{}此属性：{}", fieldName, e);
+        }catch (IllegalAccessException e){
+            logger.error("raftConfig 设置错误，访问{}此属性异常：{}", fieldName, e);
+        }
+
+    }
 
     public int getClusterSize(){
         return clusterAddress.size();

@@ -1,5 +1,6 @@
 package com.pzx.raft.node;
 
+import com.pzx.raft.service.RaftClusterMembershipChangeService;
 import com.pzx.raft.service.RaftConsensusService;
 import com.pzx.raft.service.RaftKVClientService;
 import com.pzx.raft.service.entity.AppendEntriesRequest;
@@ -38,6 +39,8 @@ public class Peer {
 
     private RaftKVClientService raftKVClientServiceSync;
 
+    private RaftClusterMembershipChangeService raftClusterMembershipChangeServiceSync;
+
     public Peer(int nodeId, String peerAddress) {
         this.nodeId = nodeId;
         this.peerAddress = peerAddress;
@@ -46,6 +49,7 @@ public class Peer {
         proxyConfig.setInvokeType(InvokeType.SYNC);
         raftConsensusServiceSync = proxyConfig.getProxy(RaftConsensusService.class);
         raftKVClientServiceSync = proxyConfig.getProxy(RaftKVClientService.class);
+        raftClusterMembershipChangeServiceSync = proxyConfig.getProxy(RaftClusterMembershipChangeService.class);
 
     }
 

@@ -4,7 +4,6 @@ import com.pzx.raft.config.NodeConfig;
 import com.pzx.raft.log.Command;
 import com.pzx.raft.log.LogEntry;
 import com.pzx.raft.node.NodePersistMetaData;
-import com.pzx.raft.node.NodeState;
 import com.pzx.raft.node.RaftNode;
 import com.pzx.raft.service.RaftConsensusService;
 import com.pzx.raft.service.entity.*;
@@ -28,17 +27,22 @@ public class RaftConsensusServiceImpl implements RaftConsensusService {
     }
 
     /**
-     * 1. 如果当前任期大于请求投票中的任期，则拒绝为其投票
-     * 2. 如果当前任期小于请求投票中的人去，则处理任期落后
-     * 3. 如果请求投票中的日志信息比当前节点的日志更新，则同意投票。否则拒绝投票
+     * 1. 如果当前有确认的leader，则忽略请求投票的RPC
+     * 2. 如果当前任期大于请求投票中的任期，则拒绝为其投票
+     * 3. 如果当前任期小于请求投票中的人去，则处理任期落后
+     * 4. 如果请求投票中的日志信息比当前节点的日志更新，则同意投票。否则拒绝投票
      * @param request
      * @return
      */
     @Override
     public ReqVoteResponse requestVote(ReqVoteRequest request) {
+        ReqVoteResponse reqVoteResponse = ReqVoteResponse.builder().currentTerm(raftNode.getCurrentTerm()).voteGranted(false).build();
+
+        if (!raftNode.getPeerMap().containsKey(request.getCandidateId()))
+            return reqVoteResponse;
+
         raftNode.getLock().lock();
         try {
-            ReqVoteResponse reqVoteResponse = ReqVoteResponse.builder().currentTerm(raftNode.getCurrentTerm()).voteGranted(false).build();
             if (request.getCandidateTerm() < raftNode.getCurrentTerm() )
                 return reqVoteResponse;
             else if (request.getCandidateTerm() > raftNode.getCurrentTerm())
@@ -70,9 +74,15 @@ public class RaftConsensusServiceImpl implements RaftConsensusService {
      */
     @Override
     public AppendEntriesResponse appendEntries(AppendEntriesRequest request) {
+        AppendEntriesResponse appendEntriesResponse = AppendEntriesResponse.builder().currentTerm(raftNode.getCurrentTerm()).success(false).build();
+
+        if (!raftNode.getPeerMap().containsKey(request.getLeaderId())){
+            return appendEntriesResponse;
+        }
+
         raftNode.getLock().lock();
         try {
-            AppendEntriesResponse appendEntriesResponse = AppendEntriesResponse.builder().currentTerm(raftNode.getCurrentTerm()).success(false).build();
+
             //1. 如果leader的任期小于当前节点任期，则返回false。如果leader的任期大于当前节点任期，则处理任期落后
             if (request.getLeaderTerm() < raftNode.getCurrentTerm())
                 return appendEntriesResponse;
@@ -82,7 +92,7 @@ public class RaftConsensusServiceImpl implements RaftConsensusService {
             //2. 如果还没有设置leader，则确定leader，不可能出现raftNode.getLeaderId() != 0 &&  raftNode.getLeaderId() != request.getLeaderId()的情况
             if (raftNode.getLeaderId() == 0){
                 raftNode.setLeaderId(request.getLeaderId());
-                raftNode.setState(NodeState.FOLLOWER);
+                raftNode.setState(RaftNode.NodeState.FOLLOWER);
                 logger.info("new leaderId={}, conf={}", raftNode.getLeaderId(), raftNode.getRaftConfig().toString());
             }
 
@@ -158,8 +168,11 @@ public class RaftConsensusServiceImpl implements RaftConsensusService {
         if (raftNode.getLastAppliedIndex() < raftNode.getCommitIndex()) {
             // apply state machine
             for (long index = raftNode.getLastAppliedIndex() + 1; index <= raftNode.getCommitIndex(); index++) {
-                LogEntry entry = raftNode.getRaftLog().read(index);
-                raftNode.getStateMachine().apply(entry);
+                LogEntry logEntry = raftNode.getRaftLog().read(index);
+                if (logEntry.getCommand().getCommandType() == Command.CommandType.DATA)
+                    raftNode.getStateMachine().apply(logEntry);
+                else if (logEntry.getCommand().getCommandType() == Command.CommandType.CONFIGURATION)
+                    raftNode.applyConfiguration(logEntry);
                 raftNode.setLastAppliedIndex(index);
             }
         }
@@ -181,6 +194,11 @@ public class RaftConsensusServiceImpl implements RaftConsensusService {
     @Override
     public InstallSnapshotResponse installSnapshot(InstallSnapshotRequest request) {
         InstallSnapshotResponse installSnapshotResponse = InstallSnapshotResponse.builder().currentTerm(raftNode.getCurrentTerm()).success(false).build();
+
+        if (!raftNode.getPeerMap().containsKey(request.getLeaderId())){
+            return installSnapshotResponse;
+        }
+
         //1. 一些取小install snapshot的情况
         if (raftNode.getIsTakeSnapshot().get()){
             logger.warn("already in take snapshot, do not handle install snapshot request now");

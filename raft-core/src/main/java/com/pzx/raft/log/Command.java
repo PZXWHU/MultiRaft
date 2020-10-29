@@ -9,6 +9,7 @@ import java.util.Objects;
  * @author PZX
  */
 @Getter
+@Setter
 @Builder
 @ToString
 @EqualsAndHashCode
@@ -16,9 +17,21 @@ import java.util.Objects;
 @AllArgsConstructor
 public class Command {
 
+    public enum CommandType{
+        DATA,CONFIGURATION;
+    }
+
     private String key;
 
     private Object value;
+
+    private CommandType commandType;//默认为DATA
+
+    public Command(String key, Object value){
+        this.key = key;
+        this.value = value;
+        this.commandType = CommandType.DATA;
+    }
 
 
 }

@@ -3,13 +3,16 @@ package com.pzx.raft.node;
 import com.alibaba.fastjson.JSONObject;
 import com.pzx.raft.config.NodeConfig;
 import com.pzx.raft.config.RaftConfig;
+import com.pzx.raft.log.Command;
 import com.pzx.raft.log.LogEntry;
 import com.pzx.raft.exception.RaftError;
 import com.pzx.raft.exception.RaftException;
 import com.pzx.raft.log.RocksDBRaftLog;
+import com.pzx.raft.service.RaftClusterMembershipChangeService;
 import com.pzx.raft.service.RaftConsensusService;
 import com.pzx.raft.service.RaftKVClientService;
 import com.pzx.raft.service.entity.*;
+import com.pzx.raft.service.impl.RaftClusterMembershipChangeServiceImpl;
 import com.pzx.raft.service.impl.RaftConsensusServiceImpl;
 import com.pzx.raft.service.impl.RaftKVClientServiceImpl;
 import com.pzx.raft.statemachine.MemoryMapStateMachine;
@@ -51,8 +54,13 @@ import java.util.concurrent.locks.ReentrantLock;
 @Setter
 public class RaftNode {
 
-    private final static Logger logger = LoggerFactory.getLogger(RaftNode.class);
+    public enum  NodeState {
+        FOLLOWER,
+        CANDIDATE,
+        LEADER
+    }
 
+    private final static Logger logger = LoggerFactory.getLogger(RaftNode.class);
 
     //Raft节点配置
     private RaftConfig raftConfig;
@@ -169,6 +177,7 @@ public class RaftNode {
        RpcServer rpcServer = new NettyServer.Builder(selfAddress).autoScanService(false).build();
        rpcServer.publishService(new RaftConsensusServiceImpl(this), RaftConsensusService.class.getCanonicalName());
        rpcServer.publishService(new RaftKVClientServiceImpl(this), RaftKVClientService.class.getCanonicalName());
+       rpcServer.publishService(new RaftClusterMembershipChangeServiceImpl(this), RaftClusterMembershipChangeService.class.getCanonicalName());
        return rpcServer;
    }
 
@@ -358,6 +367,7 @@ public class RaftNode {
         try {
             //1. 将日志写入本地日志，并复制到所有节点
             long replicateEntryIndex = raftLog.write(logEntry);
+
             /*
             resetHeartbeatTimer();
             for (Peer peer : peerMap.values()) {
@@ -365,11 +375,11 @@ public class RaftNode {
             }
              */
 
-            //2. 如果配置中不要求写入大部分节点，则直接返回
+            //3. 如果配置中不要求写入大部分节点，则直接返回
             if (raftConfig.isAsyncWrite()) {
                 return true;// 主节点写成功后，就返回。
             }
-            //3. 等待commitIndex达到复制日志的index，或者达到最大时长
+            //4. 等待commitIndex达到复制日志的index，或者达到最大时长
             try {
                 long startTime = System.currentTimeMillis();
                 while (lastAppliedIndex < replicateEntryIndex) {
@@ -382,7 +392,7 @@ public class RaftNode {
                 e.printStackTrace();
             }
 
-            //4. 如果等待过程被中断，或者达到最大时长，但是并没有复制到大多数节点，则返回写入失败
+            //5. 如果等待过程被中断，或者达到最大时长，但是并没有复制到大多数节点，则返回写入失败
             logger.debug("lastAppliedIndex={} replicateEntryIndex={}", lastAppliedIndex, replicateEntryIndex);
             if (lastAppliedIndex < replicateEntryIndex) {
                 return false;
@@ -526,11 +536,15 @@ public class RaftNode {
             commitIndex = newCommitIndex;
             raftLog.updateNodePersistMetaData(NodePersistMetaData.builder().commitIndex(commitIndex).build());
             for (long index = oldCommitIndex + 1; index <= newCommitIndex; index++) {
-                stateMachine.apply(raftLog.read(index));
+                LogEntry logEntry = raftLog.read(index);
+                if (logEntry.getCommand().getCommandType() == Command.CommandType.DATA)
+                    stateMachine.apply(logEntry);
+                else if (logEntry.getCommand().getCommandType() == Command.CommandType.CONFIGURATION)
+                    applyConfiguration(logEntry);
+                lastAppliedIndex = index;
             }
-
             //4. 唤醒所有等待commitIndex条件对象的线程
-            lastAppliedIndex = commitIndex;
+
             logger.info("commitIndex={} lastAppliedIndex={}", commitIndex, lastAppliedIndex);
             commitIndexCondition.signalAll();
         }finally {
@@ -731,17 +745,47 @@ public class RaftNode {
         votedFor = raftLog.getNodePersistMetaData().getVotedFor();
         commitIndex = Math.max(commitIndex, raftLog.getNodePersistMetaData().getCommitIndex());//日志持久化的commitIndex一定大于等于快照中的commitIndex
         currentTerm = Math.max(currentTerm, raftLog.getNodePersistMetaData().getCurrentTerm());//日志持久化的currentTerm一定大于等于快照中的currentTerm
-        lastAppliedIndex = commitIndex;
-        for(long index = snapshotMetaData.getLastIncludedIndex() + 1; index <= lastAppliedIndex; index++){
+
+        for(long index = snapshotMetaData.getLastIncludedIndex() + 1; index <= commitIndex; index++){
             LogEntry logEntry = raftLog.read(index);
-            stateMachine.apply(logEntry);
+            if (logEntry.getCommand().getCommandType() == Command.CommandType.DATA)
+                stateMachine.apply(logEntry);
+            else if (logEntry.getCommand().getCommandType() == Command.CommandType.CONFIGURATION)
+                applyConfiguration(logEntry);
+            lastAppliedIndex = index;
         }
     }
 
     /**----------------------------------集群成员以及配置变更------------------------------**/
 
-    public void applyConfiguration(LogEntry entry) {
+    /**
+     * 更改日志条目中对应的配置
+     * https://segmentfault.com/a/1190000022796386
+     * https://www.cnblogs.com/foxmailed/p/7190642.html
+     * @param logEntry
+     */
+    public void applyConfiguration(LogEntry logEntry) {
+        Command command = logEntry.getCommand();
+        raftConfig.set(command.getKey(), command.getValue());
+        //更新同伴节点
+        if (command.getKey().equals(RaftConfig.CLUSTER_ADDRESS_FIELD_NAME)){
+            Map<Integer, String> peerAddress = raftConfig.getPeersAddress();
+            //判断增加节点配置
+            for(Map.Entry<Integer, String> entry : peerAddress.entrySet()){
+                if (!peerMap.containsKey(entry.getKey())){
+                    Peer peer = new Peer(entry.getKey(), entry.getValue());
+                    peer.setNextIndex(raftLog.getLastIndex() + 1);
+                    peerMap.put(entry.getKey(), peer);
+                }
+            }
+            //判断移出节点配置
+            for (Map.Entry<Integer, Peer> entry : peerMap.entrySet()){
+                if (!peerAddress.containsKey(entry.getKey()))
+                    peerMap.remove(entry.getKey());
+            }
+        }
 
+        logger.info("set conf :{} = {}, leaderId={}", command.getKey(), command.getValue(), leaderId);
     }
 
     /**---------------------------------utils method-------------------------------**/

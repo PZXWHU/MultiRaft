@@ -20,7 +20,10 @@ public class RaftKVClientServiceImpl implements RaftKVClientService {
     public ClientKVResponse operateKV(ClientKVRequest request) {
         if (raftNode.getLeaderId() == 0){
             return ClientKVResponse.builder().success(false).message("集群不可用：还未选举出leader节点！").build();
-        }else if (raftNode.getLeaderId() == NodeConfig.nodeId){
+        }else if (raftNode.getLeaderId() != NodeConfig.nodeId){
+            //redirect to leader
+            return (ClientKVResponse) raftNode.getPeerMap().get(raftNode.getLeaderId()).getRaftKVClientServiceSync().operateKV(request);
+        }else {
             if (request.getType() == ClientKVRequest.GET){
                 return ClientKVResponse.builder().success(true).message("获取数据成功").result(raftNode.getStateMachine().get(request.getKey())).build();
             }else {
@@ -31,9 +34,6 @@ public class RaftKVClientServiceImpl implements RaftKVClientService {
                 else
                     return ClientKVResponse.builder().success(false).message("设置数据失败").build();
             }
-        }else {
-            //redirect to leader
-            return (ClientKVResponse) raftNode.getPeerMap().get(raftNode.getLeaderId()).getRaftKVClientServiceSync().operateKV(request);
         }
 
     }
