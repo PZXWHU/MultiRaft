@@ -11,6 +11,7 @@
   <modules>
     <module>raft-core</module>
     <module>raft-rpc</module>
+    <module>raft-test</module>
   </modules>
 
   <name>MyRaft</name>
@@ -21,6 +22,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>
+    <netty-version>4.1.50.Final</netty-version>
   </properties>
 
   <dependencies>

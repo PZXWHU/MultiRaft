@@ -48,7 +48,7 @@ public class RaftClusterMembershipChangeServiceImpl implements RaftClusterMember
             return (ClusterMembershipChangeResponse) raftNode.getPeerMap().get(raftNode.getLeaderId())
                     .getRaftClusterMembershipChangeServiceSync().addNode(request);
         }else {
-            if (raftNode.getPeerMap().containsKey(request.getNodeId())){
+            if (raftNode.getPeerMap().containsKey(request.getNodeId()) || NodeConfig.nodeId == request.getNodeId()){
                 logger.warn("the node is already in cluster");
                 response.setMessage("the node is already in cluster");
                 return response;
@@ -83,14 +83,17 @@ public class RaftClusterMembershipChangeServiceImpl implements RaftClusterMember
             return (ClusterMembershipChangeResponse) raftNode.getPeerMap().get(raftNode.getLeaderId())
                     .getRaftClusterMembershipChangeServiceSync().removeNode(request);
         }else {
-            if (!raftNode.getPeerMap().containsKey(request.getNodeId())){
+            if (!raftNode.getPeerMap().containsKey(request.getNodeId()) && NodeConfig.nodeId != request.getNodeId()){
                 logger.warn("the node is not in cluster");
                 response.setMessage("the node is not in cluster");
                 return response;
             }
             Command removeNodeCommand = new Command();
             Map<Integer, String> newClusterAddress = new HashMap<>(raftNode.getRaftConfig().getClusterAddress());
-            newClusterAddress.remove(request.getNodeId());
+            if (!newClusterAddress.remove(request.getNodeId()).equals(request.getNodeAddress())){
+                response.setMessage("the node address is not correct");
+                return response;
+            }
             removeNodeCommand.setKey(RaftConfig.CLUSTER_ADDRESS_FIELD_NAME);
             removeNodeCommand.setValue(newClusterAddress);
             removeNodeCommand.setCommandType(Command.CommandType.CONFIGURATION);

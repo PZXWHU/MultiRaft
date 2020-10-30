@@ -135,7 +135,7 @@ public class RaftNode {
 
         //初始化同伴节点
         for(Map.Entry<Integer, String> entry : raftConfig.getPeersAddress().entrySet()){
-            peerMap.put(entry.getKey(), new Peer(entry.getKey(), entry.getValue()));
+            peerMap.put(entry.getKey(), new Peer(entry.getKey(), entry.getValue(), raftLog.getLastIndex() + 1));
         }
 
         executorService = ThreadPoolUtils.newThreadPoolExecutor(raftConfig.getRaftConsensusThreadNum(), raftConfig.getRaftConsensusThreadNum(),
@@ -145,7 +145,7 @@ public class RaftNode {
         rpcServer = initRpcServer();
     }
 
-    private void start(){
+    public void start(){
         //重置选举定时器
         resetElectionTimer();
         //开启快照任务
@@ -163,7 +163,7 @@ public class RaftNode {
             String jsonString = MyFileUtils.readFileToString(configPath);
             JSONObject jsonObject = JSONObject.parseObject(jsonString);
             NodeConfig.nodeId = (int)jsonObject.get(NodeConfig.NODE_ID_CONFIG_NAME);
-            NodeConfig.raftHome = (String)jsonObject.get(NodeConfig.RAFT_HOME_CONFIG_NAME) + NodeConfig.nodeId;
+            NodeConfig.raftHome = (String)jsonObject.get(NodeConfig.RAFT_HOME_CONFIG_NAME);
             MyFileUtils.mkDirIfNotExist(NodeConfig.raftHome);//创建Raft主目录
             raftConfig = JSONObject.parseObject(jsonString, RaftConfig.class);
         }catch (IOException e){
@@ -233,7 +233,7 @@ public class RaftNode {
             resetElectionTimer();
             votedFor = NodeConfig.nodeId;
             voteGrantedNum.set(1);//清除之前的投票计数，新的任期目前只有自己投票
-            raftLog.updateNodePersistMetaData(NodePersistMetaData.builder().votedFor(votedFor).currentTerm(currentTerm).build());
+            raftLog.updateNodePersistMetaData(NodePersistMetadata.builder().votedFor(votedFor).currentTerm(currentTerm).build());
 
         }finally {
             lock.unlock();
@@ -368,13 +368,6 @@ public class RaftNode {
             //1. 将日志写入本地日志，并复制到所有节点
             long replicateEntryIndex = raftLog.write(logEntry);
 
-            /*
-            resetHeartbeatTimer();
-            for (Peer peer : peerMap.values()) {
-                appendEntries(peer);
-            }
-             */
-
             //3. 如果配置中不要求写入大部分节点，则直接返回
             if (raftConfig.isAsyncWrite()) {
                 return true;// 主节点写成功后，就返回。
@@ -417,8 +410,10 @@ public class RaftNode {
         raftLog.getLock().lock();
         try {
             long firstLogIndex = raftLog.getLastIndex() - raftLog.getTotalSize() + 1;
-            if (peer.getNextIndex() < firstLogIndex)
+            if (peer.getNextIndex() < firstLogIndex){
                 isNeedInstallSnapshot = true;
+            }
+
         }finally {
             raftLog.getLock().unlock();
         }
@@ -492,7 +487,8 @@ public class RaftNode {
                     peer.setNextIndex(peer.getMatchIndex() + 1);
                     mayAdvanceCommitIndex();
                 }else
-                    peer.setNextIndex(peer.getNextIndex() - 1);
+                    if (peer.getNextIndex() > 1)
+                        peer.setNextIndex(peer.getNextIndex() - 1);
             }
         }
 
@@ -534,7 +530,7 @@ public class RaftNode {
             //3. newCommitIndex有效，更改节点commitIndex，并持久化。并将新提交的日志条目应用到状态机中
             long oldCommitIndex = commitIndex;
             commitIndex = newCommitIndex;
-            raftLog.updateNodePersistMetaData(NodePersistMetaData.builder().commitIndex(commitIndex).build());
+            raftLog.updateNodePersistMetaData(NodePersistMetadata.builder().commitIndex(commitIndex).build());
             for (long index = oldCommitIndex + 1; index <= newCommitIndex; index++) {
                 LogEntry logEntry = raftLog.read(index);
                 if (logEntry.getCommand().getCommandType() == Command.CommandType.DATA)
@@ -636,7 +632,7 @@ public class RaftNode {
      * 1.已经被提交的日志，即状态机的状态
      * 2.元数据：last included index（状态机最后应用的日志的索引）、last included term（状态机最后应用的日志的任期）、raft配置
      */
-    private void takeSnapshot(){
+    public void takeSnapshot(){
         //1.一些取消takeSnapshot的情况
         if (isInstallSnapshot.get()) {
             logger.info("the node is already in install snapshot, ignore take snapshot");
@@ -773,8 +769,7 @@ public class RaftNode {
             //判断增加节点配置
             for(Map.Entry<Integer, String> entry : peerAddress.entrySet()){
                 if (!peerMap.containsKey(entry.getKey())){
-                    Peer peer = new Peer(entry.getKey(), entry.getValue());
-                    peer.setNextIndex(raftLog.getLastIndex() + 1);
+                    Peer peer = new Peer(entry.getKey(), entry.getValue(), raftLog.getLastIndex() + 1);
                     peerMap.put(entry.getKey(), peer);
                 }
             }
@@ -809,7 +804,7 @@ public class RaftNode {
         currentTerm = newTerm;
         leaderId = 0;
         votedFor = 0;
-        raftLog.updateNodePersistMetaData(NodePersistMetaData.builder().currentTerm(currentTerm).votedFor(votedFor).build());
+        raftLog.updateNodePersistMetaData(NodePersistMetadata.builder().currentTerm(currentTerm).votedFor(votedFor).build());
 
         // 如果是leader的话，需要停止心跳计时器
         if (heartbeatScheduledFuture != null && !heartbeatScheduledFuture.isDone()) {
@@ -849,7 +844,7 @@ public class RaftNode {
 
         StateMachine stateMachine = node.stateMachine;
         RaftLog raftLog = node.raftLog;
-        raftLog.updateNodePersistMetaData(NodePersistMetaData.builder().votedFor(1).currentTerm(1).build());//持久化votedFor、currentTerm
+        raftLog.updateNodePersistMetaData(NodePersistMetadata.builder().votedFor(1).currentTerm(1).build());//持久化votedFor、currentTerm
         for(int i = 1; i < 100; i++){
             LogEntry logEntry = new LogEntry(0,1,new Command(i + "", i));
             raftLog.write(logEntry);
@@ -858,7 +853,7 @@ public class RaftNode {
                 node.commitIndex = logEntry.getIndex();
                 stateMachine.apply(logEntry);
                 node.lastAppliedIndex = logEntry.getIndex();
-                raftLog.updateNodePersistMetaData(NodePersistMetaData.builder().commitIndex(logEntry.getIndex()).build());
+                raftLog.updateNodePersistMetaData(NodePersistMetadata.builder().commitIndex(logEntry.getIndex()).build());
             }
             //index = 50时，生成快照
             if (i == 50) {
@@ -912,16 +907,6 @@ public class RaftNode {
 
 
         RaftConfig config = new RaftConfig();
-        /*
-        config.setRaftHome(config.getRaftHome() + args[0]);
-        config.setNodeId(Integer.parseInt(args[0]));
-
-         */
-        Map<Integer, String> clusterAddress = new HashMap<>();
-        clusterAddress.put(1, "127.0.0.1:9997");
-        clusterAddress.put(2, "127.0.0.1:9998");
-        clusterAddress.put(3, "127.0.0.1:9999");
-        config.setClusterAddress(clusterAddress);
         RaftNode node = new RaftNode(args[0]);
         node.start();
 

@@ -2,7 +2,7 @@ package com.pzx.raft.log;
 
 import com.pzx.raft.exception.RaftError;
 import com.pzx.raft.exception.RaftException;
-import com.pzx.raft.node.NodePersistMetaData;
+import com.pzx.raft.node.NodePersistMetadata;
 import com.pzx.raft.utils.ByteUtils;
 import com.pzx.raft.utils.ProtobufSerializerUtils;
 import org.rocksdb.Options;
@@ -139,24 +139,24 @@ public class RocksDBRaftLog implements RaftLog {
     }
 
     @Override
-    public NodePersistMetaData getNodePersistMetaData() {
+    public NodePersistMetadata getNodePersistMetaData() {
         int votedFor = 0;
         long currentTerm = 0l;
         long commitIndex = 0l;
-        NodePersistMetaData.LOCK.lock();
+        NodePersistMetadata.LOCK.lock();
         try {
-            if (logDb.get(NodePersistMetaData.VOTED_FOR_KEY) != null)
-                votedFor = ByteUtils.bytesToInteger(logDb.get(NodePersistMetaData.VOTED_FOR_KEY));
-            if (logDb.get(NodePersistMetaData.CURRENT_TERM_KEY) != null)
-                currentTerm = ByteUtils.bytesToLong(logDb.get(NodePersistMetaData.CURRENT_TERM_KEY));
-            if (logDb.get(NodePersistMetaData.COMMIT_INDEX_KEY) != null)
-                commitIndex = ByteUtils.bytesToLong(logDb.get(NodePersistMetaData.COMMIT_INDEX_KEY));
+            if (logDb.get(NodePersistMetadata.VOTED_FOR_KEY) != null)
+                votedFor = ByteUtils.bytesToInteger(logDb.get(NodePersistMetadata.VOTED_FOR_KEY));
+            if (logDb.get(NodePersistMetadata.CURRENT_TERM_KEY) != null)
+                currentTerm = ByteUtils.bytesToLong(logDb.get(NodePersistMetadata.CURRENT_TERM_KEY));
+            if (logDb.get(NodePersistMetadata.COMMIT_INDEX_KEY) != null)
+                commitIndex = ByteUtils.bytesToLong(logDb.get(NodePersistMetadata.COMMIT_INDEX_KEY));
         }catch (RocksDBException e){
             logger.error("get log metaData failed : " + e);
         }finally {
-            NodePersistMetaData.LOCK.unlock();
+            NodePersistMetadata.LOCK.unlock();
         }
-        return NodePersistMetaData.builder()
+        return NodePersistMetadata.builder()
                 .votedFor(votedFor)
                 .commitIndex(commitIndex)
                 .currentTerm(currentTerm)
@@ -164,21 +164,21 @@ public class RocksDBRaftLog implements RaftLog {
     }
 
     @Override
-    public void updateNodePersistMetaData(NodePersistMetaData other) {
-        NodePersistMetaData.LOCK.lock();
+    public void updateNodePersistMetaData(NodePersistMetadata other) {
+        NodePersistMetadata.LOCK.lock();
         try {
             if (other.getVotedFor() > 0)
-                logDb.put(NodePersistMetaData.VOTED_FOR_KEY, ByteUtils.integerToBytes(other.getVotedFor()));
+                logDb.put(NodePersistMetadata.VOTED_FOR_KEY, ByteUtils.integerToBytes(other.getVotedFor()));
             if(other.getCommitIndex() > 0){
-                logDb.put(NodePersistMetaData.COMMIT_INDEX_KEY, ByteUtils.longToBytes(other.getCommitIndex()));
+                logDb.put(NodePersistMetadata.COMMIT_INDEX_KEY, ByteUtils.longToBytes(other.getCommitIndex()));
             }
             if (other.getCurrentTerm() > 0){
-                logDb.put(NodePersistMetaData.CURRENT_TERM_KEY, ByteUtils.longToBytes(other.getCurrentTerm()));
+                logDb.put(NodePersistMetadata.CURRENT_TERM_KEY, ByteUtils.longToBytes(other.getCurrentTerm()));
             }
         }catch (RocksDBException e){
             logger.error("update log metaData failed : " + e);
         }finally {
-            NodePersistMetaData.LOCK.unlock();
+            NodePersistMetadata.LOCK.unlock();
         }
     }
 

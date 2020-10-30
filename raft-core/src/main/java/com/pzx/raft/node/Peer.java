@@ -41,9 +41,11 @@ public class Peer {
 
     private RaftClusterMembershipChangeService raftClusterMembershipChangeServiceSync;
 
-    public Peer(int nodeId, String peerAddress) {
+    public Peer(int nodeId, String peerAddress, long nextIndex) {
         this.nodeId = nodeId;
         this.peerAddress = peerAddress;
+        this.nextIndex = nextIndex;
+
         ProxyConfig proxyConfig = new ProxyConfig().setInvokeType(InvokeType.CALLBACK).setDirectServerUrl(peerAddress).setTimeout(4000);
         raftConsensusServiceAsync = proxyConfig.getProxy(RaftConsensusService.class);
         proxyConfig.setInvokeType(InvokeType.SYNC);

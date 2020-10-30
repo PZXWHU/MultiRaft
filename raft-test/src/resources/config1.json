@@ -1,11 +1,12 @@
 {
-  "nodeId" : 3,
-  "raftHome" : "./raftHome3",
+  "nodeId" : 1,
+  "raftHome" : "./raftHome1",
   "clusterAddress" : {
       "1" : "127.0.0.1:9999",
       "2" : "127.0.0.1:8999",
       "3" : "127.0.0.1:7999"
   },
-  "snapshotMinLogSize" : 70
+  "snapshotMinLogSize" : 50
+
 
 }

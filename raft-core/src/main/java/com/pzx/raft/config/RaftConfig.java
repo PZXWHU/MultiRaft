@@ -24,10 +24,12 @@ public class RaftConfig {
     private final static Class<RaftConfig> clazz = RaftConfig.class;
 
     public final static String CLUSTER_ADDRESS_FIELD_NAME = "clusterAddress";
-    /*-----------------------------Constant----------------------------------*/
+
 
     //解析之后的集群地址
     public Map<Integer, String> clusterAddress;
+
+    /*-----------------------------Constant----------------------------------*/
 
     // A follower would become a candidate if it doesn't receive any message
     // from the leader in electionTimeoutMs milliseconds
@@ -41,8 +43,6 @@ public class RaftConfig {
 
     // log entry大小达到snapshotMinLogSize，才做snapshot
     public int snapshotMinLogSize = 100 * 1024 * 1024;
-
-    public int maxSnapshotBytesPerRequest = 500 * 1024; // 500k
 
     public int maxLogEntriesPerRequest = 50;
 

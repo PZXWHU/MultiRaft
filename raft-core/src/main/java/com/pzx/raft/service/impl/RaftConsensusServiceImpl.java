@@ -3,19 +3,19 @@ package com.pzx.raft.service.impl;
 import com.pzx.raft.config.NodeConfig;
 import com.pzx.raft.log.Command;
 import com.pzx.raft.log.LogEntry;
-import com.pzx.raft.node.NodePersistMetaData;
+import com.pzx.raft.node.NodePersistMetadata;
 import com.pzx.raft.node.RaftNode;
 import com.pzx.raft.service.RaftConsensusService;
 import com.pzx.raft.service.entity.*;
 import com.pzx.raft.utils.MyFileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.nio.file.*;
 
+/**
+ * 本服务只在集群内部调用，所以如果接收到的Rpc不来自集群内部节点，则直接返回默认值。
+ */
 public class RaftConsensusServiceImpl implements RaftConsensusService {
 
     private static final Logger logger = LoggerFactory.getLogger(RaftConsensusServiceImpl.class);
@@ -27,6 +27,7 @@ public class RaftConsensusServiceImpl implements RaftConsensusService {
     }
 
     /**
+     *
      * 1. 如果当前有确认的leader，则忽略请求投票的RPC
      * 2. 如果当前任期大于请求投票中的任期，则拒绝为其投票
      * 3. 如果当前任期小于请求投票中的人去，则处理任期落后
@@ -39,6 +40,8 @@ public class RaftConsensusServiceImpl implements RaftConsensusService {
         ReqVoteResponse reqVoteResponse = ReqVoteResponse.builder().currentTerm(raftNode.getCurrentTerm()).voteGranted(false).build();
 
         if (!raftNode.getPeerMap().containsKey(request.getCandidateId()))
+            return reqVoteResponse;
+        if (raftNode.getLeaderId() != 0)
             return reqVoteResponse;
 
         raftNode.getLock().lock();
@@ -53,7 +56,7 @@ public class RaftConsensusServiceImpl implements RaftConsensusService {
                     && request.getLastLogIndex() >= raftNode.getRaftLog().getLastIndex());
             if (raftNode.getVotedFor() == 0 && logIsOk) {
                 raftNode.setVotedFor(request.getCandidateId());
-                raftNode.getRaftLog().updateNodePersistMetaData(NodePersistMetaData.builder().votedFor(request.getCandidateId()).build());
+                raftNode.getRaftLog().updateNodePersistMetaData(NodePersistMetadata.builder().votedFor(request.getCandidateId()).build());
                 reqVoteResponse.setVoteGranted(true);
             }
             return reqVoteResponse;
@@ -105,7 +108,6 @@ public class RaftConsensusServiceImpl implements RaftConsensusService {
                         request.getPrevLogIndex(), raftNode.getRaftLog().getLastIndex());
                 return appendEntriesResponse;
             }
-
             raftNode.getRaftLog().getLock().lock();
             long raftLogFirstIndex;
             try {
@@ -163,7 +165,7 @@ public class RaftConsensusServiceImpl implements RaftConsensusService {
     private void advanceCommitIndex(AppendEntriesRequest request){
         long newCommitIndex = Math.min(request.getLeaderCommit(), request.getPrevLogIndex() + request.getEntriesNum());
         raftNode.setCommitIndex(newCommitIndex);
-        raftNode.getRaftLog().updateNodePersistMetaData(NodePersistMetaData.builder().commitIndex(newCommitIndex).build());
+        raftNode.getRaftLog().updateNodePersistMetaData(NodePersistMetadata.builder().commitIndex(newCommitIndex).build());
 
         if (raftNode.getLastAppliedIndex() < raftNode.getCommitIndex()) {
             // apply state machine

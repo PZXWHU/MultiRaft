@@ -6,6 +6,5 @@
       "2" : "127.0.0.1:8999",
       "3" : "127.0.0.1:7999"
   },
-  "snapshotMinLogSize" : 70
-
+  "snapshotMinLogSize" : 50
 }

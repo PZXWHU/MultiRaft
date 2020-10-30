@@ -96,9 +96,5 @@ public class MemoryMapStateMachine implements StateMachine {
         return true;
     }
 
-    @Override
-    public boolean delete(String key) {
-        stateMachine.remove(key);
-        return true;
-    }
+
 }

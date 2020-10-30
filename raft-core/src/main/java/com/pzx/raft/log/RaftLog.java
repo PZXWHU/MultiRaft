@@ -1,6 +1,6 @@
 package com.pzx.raft.log;
 
-import com.pzx.raft.node.NodePersistMetaData;
+import com.pzx.raft.node.NodePersistMetadata;
 
 import java.util.concurrent.locks.Lock;
 
@@ -58,14 +58,14 @@ public interface RaftLog {
      * 获取日志的持久化的节点元数据
      * @return
      */
-    NodePersistMetaData getNodePersistMetaData();
+    NodePersistMetadata getNodePersistMetaData();
 
     /**
      * raft节点日志的元数据持久化，用于节点重启恢复
      * @param other
      * @return
      */
-    void updateNodePersistMetaData(NodePersistMetaData other);
+    void updateNodePersistMetaData(NodePersistMetadata other);
 
 
     Lock getLock();

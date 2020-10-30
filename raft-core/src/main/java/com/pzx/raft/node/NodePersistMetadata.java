@@ -12,7 +12,7 @@ import java.util.concurrent.locks.ReentrantLock;
 @Setter
 @Builder
 @ToString
-public class NodePersistMetaData {
+public class NodePersistMetadata {
 
     public static final byte[] CURRENT_TERM_KEY = "currentTerm".getBytes();
     public static final byte[] VOTED_FOR_KEY = "votedFor".getBytes();

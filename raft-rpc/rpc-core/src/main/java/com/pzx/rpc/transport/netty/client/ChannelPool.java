@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -29,10 +30,14 @@ public class ChannelPool {
     private static EventLoopGroup eventLoopGroup;
     private static Map<String, Channel> channels = new ConcurrentHashMap<>();
 
+    private static Set<String> connectingChannels = ConcurrentHashMap.newKeySet();
     private static Map<String, InetSocketAddress> blackList = new ConcurrentHashMap<>();
     static {
         ThreadPoolFactory.getScheduledThreadPool().scheduleWithFixedDelay(() -> {
             for (Map.Entry<String, InetSocketAddress> entry : blackList.entrySet()) {
+                if (connectingChannels.contains(entry.getKey()))
+                    continue;
+                connectingChannels.add(entry.getKey());
                 bootstrap.connect(entry.getValue()).addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture channelFuture) throws Exception {
@@ -42,6 +47,7 @@ public class ChannelPool {
                         } else {
                             channelFuture.channel().close();
                         }
+                        connectingChannels.remove(entry.getKey());
                     }
                 });
             }
