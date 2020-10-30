@@ -1,10 +1,7 @@
 package com.pzx.raft.log;
 
-import com.pzx.raft.node.NodePersistMetaData;
+import com.pzx.raft.node.NodePersistMetadata;
 import org.junit.Test;
-import sun.rmi.runtime.Log;
-
-import static org.junit.Assert.*;
 
 public class RocksDBRaftLogTest {
 
@@ -59,6 +56,6 @@ public class RocksDBRaftLogTest {
 
     @Test
     public void updateNodePersistMetaData() {
-        raftLog.updateNodePersistMetaData(NodePersistMetaData.builder().commitIndex(22l).currentTerm(1l).votedFor(1).build());
+        raftLog.updateNodePersistMetaData(NodePersistMetadata.builder().commitIndex(22l).currentTerm(1l).votedFor(1).build());
     }
 }

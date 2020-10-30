@@ -1,5 +1,5 @@
 # 项目概述
-本项目是Raft分布式一致性协议的JAVA简易实现。
+本项目是Raft分布式一致性协议的JAVA简易实现。RPC框架使用的是根据自己所写的简易RPC框架[MyRPC](https://github.com/PZXWHU/MyRPC)的改进版。
 
 ## 项目实现功能
 1. leader选举
@@ -19,13 +19,20 @@
 
 [raft paper read](./doc/raft-paper-read.md)
 
+## 项目参考
+https://juejin.im/post/6844903759982624781
+https://github.com/stateIs0/lu-raft-kv
+https://github.com/maemual/raft-zh_cn/blob/master/raft-zh_cn.md
+https://github.com/wenweihu86/raft-java
 
 
 # 项目使用
 
 ## Raft节点配置文件
 
-```json
+```java
+
+
 {
   "nodeId" : 1, //节点ID，不能是0
   "raftHome" : "./raftHome1",//节点主目录，日志、快照储存位置
@@ -34,7 +41,7 @@
       "2" : "127.0.0.1:8999",
       "3" : "127.0.0.1:7999"
   }
-  /*
+    /*
    "int electionTimeoutMilliseconds" : 3000,
 
     "heartbeatPeriodMilliseconds" : 400,
@@ -50,9 +57,13 @@
     "raftConsensusThreadNum: : 20,
 
     "asyncWrite" : false
-  */
+     */
+
 }
+
 ```
+
+
 
 ## Raft节点启动
 

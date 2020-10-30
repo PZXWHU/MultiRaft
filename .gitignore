@@ -7,3 +7,16 @@
 *.iml
 out
 gen
+raft-core/src/test/java/com/pzx/AppTest.java
+raft-core/src/test/java/com/pzx/raft/snapshot/
+raft-core/src/test/java/com/pzx/raft/statemachine/
+raft-core/target/
+raft-rpc/rpc-common/src/test/
+raft-rpc/rpc-common/target/
+raft-rpc/rpc-core/src/test/
+raft-rpc/rpc-core/target/
+raft-test/src/test/
+raft-test/target/
+raftHome1/
+raftHome2/
+raftHome3/
