@@ -55,6 +55,7 @@ public class RaftConsensusServiceImpl implements RaftConsensusService {
                     || (request.getLastLogTerm() == raftNode.getLastLogTerm()
                     && request.getLastLogIndex() >= raftNode.getRaftLog().getLastIndex());
             if (raftNode.getVotedFor() == 0 && logIsOk) {
+                raftNode.resetElectionTimer();
                 raftNode.setVotedFor(request.getCandidateId());
                 raftNode.getRaftLog().updateNodePersistMetaData(NodePersistMetadata.builder().votedFor(request.getCandidateId()).build());
                 reqVoteResponse.setVoteGranted(true);

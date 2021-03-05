@@ -46,6 +46,8 @@ public class RaftConfig {
 
     public int maxLogEntriesPerRequest = 50;
 
+    public int maxSnapshotBytesPerRequest = 100 * 1024 * 1024;
+
     // replicate最大等待超时时间，单位ms
     public long maxAwaitTimeout = 2000;
 
