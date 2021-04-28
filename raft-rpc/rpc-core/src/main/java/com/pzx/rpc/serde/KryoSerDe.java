@@ -60,7 +60,7 @@ public class KryoSerDe implements RpcSerDe {
 
     @Override
     public byte getCode() {
-        return SerDeCode.valueOf("KRYO").getCode();
+        return SerDeCode.KRYO.getCode();
     }
 
 }

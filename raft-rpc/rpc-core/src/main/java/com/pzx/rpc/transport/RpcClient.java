@@ -9,7 +9,7 @@ import java.util.concurrent.CompletableFuture;
 
 public interface RpcClient {
 
-    int DEFAULT_SERDE_CODE = SerDeCode.valueOf("KRYO").getCode();
+    int DEFAULT_SERDE_CODE = SerDeCode.PROTOBUF.getCode();
 
     CompletableFuture<RpcResponse> sendRequest(RpcRequest rpcRequest);
 }

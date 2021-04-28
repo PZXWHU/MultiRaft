@@ -64,6 +64,6 @@ public class JsonSerDe implements RpcSerDe {
 
     @Override
     public byte getCode() {
-        return SerDeCode.valueOf("JSON").getCode();
+        return SerDeCode.JSON.getCode();
     }
 }

@@ -1,5 +1,5 @@
 {
-  "nodeId" : 4,
+  "serverId" : 4,
   "raftHome" : "./raftHome4",
   "clusterAddress" : {
       "1" : "127.0.0.1:9999",

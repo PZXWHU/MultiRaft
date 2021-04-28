@@ -34,7 +34,7 @@ https://github.com/wenweihu86/raft-java
 
 
 {
-  "nodeId" : 1, //节点ID，不能是0
+  "serverId" : 1, //节点ID，不能是0
   "raftHome" : "./raftHome1",//节点主目录，日志、快照储存位置
   "clusterAddress" : {//集群中所有节点的ID和地址
       "1" : "127.0.0.1:9999",
@@ -111,7 +111,7 @@ RaftClusterMembershipChangeService raftClusterMembershipChangeService = proxyCon
 #### 添加节点
 
 ```java
-ClusterMembershipChangeRequest request = ClusterMembershipChangeRequest.builder().nodeId(4).nodeAddress("127.0.0.1:6999").build();
+ClusterMembershipChangeRequest request = ClusterMembershipChangeRequest.builder().serverId(4).nodeAddress("127.0.0.1:6999").build();
 ClusterMembershipChangeResponse response = raftClusterMembershipChangeService.addNode(request);
 System.out.println(response);
 ```
@@ -119,7 +119,7 @@ System.out.println(response);
 #### 删除节点
 
 ```java
-ClusterMembershipChangeRequest request = ClusterMembershipChangeRequest.builder().nodeId(1).nodeAddress("127.0.0.1:9999").build();
+ClusterMembershipChangeRequest request = ClusterMembershipChangeRequest.builder().serverId(1).nodeAddress("127.0.0.1:9999").build();
 ClusterMembershipChangeResponse response = raftClusterMembershipChangeService.removeNode(request);
 System.out.println(response);
 ```

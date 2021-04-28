@@ -21,6 +21,8 @@ public interface RpcSerDe {
                 return SingletonFactory.getInstance(KryoSerDe.class);
             case 1:
                 return SingletonFactory.getInstance(JsonSerDe.class);
+            case 2:
+                return SingletonFactory.getInstance(ProtobufSerDe.class);
             default:
                 throw new RpcException(RpcError.UNKNOWN_SERDE);
         }

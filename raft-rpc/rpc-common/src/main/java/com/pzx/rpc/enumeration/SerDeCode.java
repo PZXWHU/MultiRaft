@@ -8,7 +8,8 @@ import lombok.Getter;
 public enum SerDeCode {
 
     KRYO((byte)0),
-    JSON((byte)1);
+    JSON((byte)1),
+    PROTOBUF((byte)2);
 
     private byte code;
 }

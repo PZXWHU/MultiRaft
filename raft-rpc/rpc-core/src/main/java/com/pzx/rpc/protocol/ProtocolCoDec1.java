@@ -33,6 +33,7 @@ public class ProtocolCoDec1 implements ProtocolCoDec {
     public  byte[] encode(Object msg, RpcSerDe serializer) {
 
         byte[] msgBytes = serializer.serialize(msg);
+
         try (ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream(msgBytes.length + 11);
              DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream)){
 
@@ -86,6 +87,7 @@ public class ProtocolCoDec1 implements ProtocolCoDec {
             RpcSerDe deserializer = RpcSerDe.getByCode(serializerCode);
 
             byte[] msg = new byte[packageLength - PACKAGE_HEAD_LENGTH];
+
             dataInputStream.read(msg);
             Object obj = deserializer.deserialize(msg, packageClass);
 

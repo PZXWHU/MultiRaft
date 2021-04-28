@@ -43,7 +43,7 @@ public class NettyServer extends AbstractRpcServer {
     }
 
     @Override
-    public <T> void publishService(Object service, String serviceName) {
+    public void publishService(Object service, String serviceName) {
         serviceProvider.addService(service, serviceName);
         if (serviceRegistry != null)
             serviceRegistry.registerService(serviceName, serverAddress);
@@ -51,48 +51,54 @@ public class NettyServer extends AbstractRpcServer {
 
     @Override
     public void start() {
-        if (this.autoScanService)
-            scanAndPublishServices();
+        new Thread(() -> {
+            if (this.autoScanService)
+                scanAndPublishServices();
 
-        EventLoopGroup bossGroup = new NioEventLoopGroup(1);
-        EventLoopGroup workerGroup = new NioEventLoopGroup();
-        EventExecutorGroup businessGroup = new DefaultEventExecutorGroup(10);//业务线程池
-        try {
-            ServerBootstrap serverBootstrap = new ServerBootstrap();
-            serverBootstrap.group(bossGroup, workerGroup)
-                    .channel(NioServerSocketChannel.class)
-                    .option(ChannelOption.SO_BACKLOG, 256)
-                    .childOption(ChannelOption.TCP_NODELAY, true)
-                    .childHandler(new ChannelInitializer<SocketChannel>() {
-                        @Override
-                        protected void initChannel(SocketChannel ch) throws Exception {
-                            ChannelPipeline pipeline = ch.pipeline();
-                            pipeline.addLast(new ProtocolNettyEncoder(rpcSerDe));
-                            pipeline.addLast(new ProtocolNettyDecoder());
-                            pipeline.addLast(businessGroup, new RpcRequestInboundHandler(serviceProvider));
-                        }
-                    });
-            ChannelFuture future = serverBootstrap.bind(serverAddress.getPort()).sync();
-            future.channel().closeFuture().sync();
+            EventLoopGroup bossGroup = new NioEventLoopGroup(1);
+            EventLoopGroup workerGroup = new NioEventLoopGroup();
+            EventExecutorGroup businessGroup = new DefaultEventExecutorGroup(10);//业务线程池
+            try {
+                ServerBootstrap serverBootstrap = new ServerBootstrap();
+                serverBootstrap.group(bossGroup, workerGroup)
+                        .channel(NioServerSocketChannel.class)
+                        .option(ChannelOption.SO_BACKLOG, 256)
+                        .childOption(ChannelOption.TCP_NODELAY, true)
+                        .childHandler(new ChannelInitializer<SocketChannel>() {
+                            @Override
+                            protected void initChannel(SocketChannel ch) throws Exception {
+                                ChannelPipeline pipeline = ch.pipeline();
+                                pipeline.addLast(new ProtocolNettyEncoder(rpcSerDe));
+                                pipeline.addLast(new ProtocolNettyDecoder());
+                                pipeline.addLast(businessGroup, new RpcRequestInboundHandler(serviceProvider));
+                            }
+                        });
+                ChannelFuture future = serverBootstrap.bind(serverAddress.getPort()).sync();
+                future.channel().closeFuture().sync();
 
-        } catch (InterruptedException e) {
-            logger.error("启动服务器时有错误发生: ", e);
-        } finally {
-            bossGroup.shutdownGracefully();
-            workerGroup.shutdownGracefully();
-        }
+            } catch (InterruptedException e) {
+                logger.error("启动服务器时有错误发生: ", e);
+            } finally {
+                bossGroup.shutdownGracefully();
+                workerGroup.shutdownGracefully();
+            }
+        }).start();
+    }
 
+    public static Builder builder(){
+        return new Builder();
     }
 
     public static class Builder{
-        private final InetSocketAddress serverAddress;
+        private InetSocketAddress serverAddress;
         private ServiceRegistry serviceRegistry;
         private boolean autoScanService = true;
 
-        public Builder(InetSocketAddress serverAddress) {
-            this.serverAddress = serverAddress;
-        }
 
+        public Builder serverAddress(InetSocketAddress serverAddress){
+            this.serverAddress = serverAddress;
+            return this;
+        }
 
         public Builder serviceRegistry(ServiceRegistry serviceRegistry){
             this.serviceRegistry = serviceRegistry;

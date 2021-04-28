@@ -5,16 +5,17 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>com.pzx</groupId>
-  <artifactId>MyRaft</artifactId>
+  <artifactId>MultiRaft</artifactId>
   <packaging>pom</packaging>
   <version>1.0-SNAPSHOT</version>
   <modules>
     <module>raft-core</module>
     <module>raft-rpc</module>
     <module>raft-test</module>
+    <module>raft-kv</module>
   </modules>
 
-  <name>MyRaft</name>
+  <name>MultiRaft</name>
   <!-- FIXME change it to the project's website -->
   <url>http://www.example.com</url>
 
