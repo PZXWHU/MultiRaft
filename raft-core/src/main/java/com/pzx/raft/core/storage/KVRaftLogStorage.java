@@ -40,6 +40,7 @@ public class KVRaftLogStorage implements RaftLogStorage {
             success = kvPrefixAdapter.put(ByteUtils.longToBytes(logEntry.getIndex()), ProtobufSerializerUtils.serialize(logEntry));
         }finally {
             if (success){
+                logEntry.onWrite(this);//触发logEntry写时间
                 kvPrefixAdapter.put(ByteUtils.stringToBytes(LAST_INDEX), ByteUtils.longToBytes(logEntry.getIndex()));
                 kvPrefixAdapter.put(ByteUtils.stringToBytes(TOTAL_SIZE), ByteUtils.longToBytes(getTotalSize() + 1));
             }
@@ -122,6 +123,5 @@ public class KVRaftLogStorage implements RaftLogStorage {
     public Lock getReadLock() {
         return kvPrefixAdapter.getReadLock();
     }
-
 
 }

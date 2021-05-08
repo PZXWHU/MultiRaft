@@ -30,4 +30,12 @@ public interface KVStore extends Snapshot {
     default void readSnapshot(String snapshotDirPath) throws Exception{
         throw new UnsupportedOperationException();
     }
+
+    default long getApproximateKeysInRange(final byte[] startKey, final byte[] endKey){
+        throw new UnsupportedOperationException();
+    }
+
+    default byte[] jumpOver(final byte[] startKey, final long distance){
+        throw new UnsupportedOperationException();
+    }
 }

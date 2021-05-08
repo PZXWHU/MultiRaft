@@ -1,12 +1,10 @@
 package com.pzx.raft.core.service.impl;
 
-import com.pzx.raft.core.config.RaftConfig;
-import com.pzx.raft.core.entity.ConfigCommand;
+import com.pzx.raft.core.entity.MemberConfigCommand;
 import com.pzx.raft.core.entity.SMCommand;
 import com.pzx.raft.core.node.RaftNode;
 import com.pzx.raft.core.service.RaftConsensusService;
 import com.pzx.raft.core.service.entity.*;
-import com.pzx.raft.core.utils.MyFileUtils;
 import com.pzx.raft.core.entity.LogEntry;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
@@ -14,6 +12,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.nio.file.*;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
@@ -149,7 +148,7 @@ public class RaftConsensusServiceImpl implements RaftConsensusService {
                     }
                     raftNode.getRaftLogStorage().removeFromStartIndex(index);
                 }
-                raftNode.getRaftLogStorage().write(logEntry);
+                raftNode.writeLogEntry(logEntry.getCommand());
             }
             advanceCommitIndex(request);
             logger.info("AppendEntries request from server {} in term {} (my term is {}), entryCount={} ",
@@ -175,10 +174,7 @@ public class RaftConsensusServiceImpl implements RaftConsensusService {
             // apply state machine
             for (long index = raftNode.getLastAppliedIndex() + 1; index <= raftNode.getCommitIndex(); index++) {
                 LogEntry logEntry = raftNode.getRaftLogStorage().read(index);
-                if (logEntry.getCommand() instanceof SMCommand)
-                    raftNode.getRaftStateMachine().apply(logEntry);
-                else if (logEntry.getCommand() instanceof ConfigCommand)
-                    raftNode.applyConfiguration(logEntry);
+                raftNode.applyCommand(logEntry.getCommand());
                 raftNode.setLastAppliedIndex(index);
                 raftNode.getRaftMetaStorage().setLastAppliedIndex(index);
             }
@@ -203,8 +199,14 @@ public class RaftConsensusServiceImpl implements RaftConsensusService {
         InstallSnapshotResponse installSnapshotResponse = InstallSnapshotResponse.builder().currentTerm(raftNode.getCurrentTerm()).success(false).build();
 
         if (!raftNode.getPeers().containsKey(request.getLeaderId())){
-
             return installSnapshotResponse;
+        }
+
+        //2. 如果还没有设置leader，则确定leader，不可能出现raftNode.getLeaderId() != 0 &&  raftNode.getLeaderId() != request.getLeaderId()的情况
+        if (raftNode.getLeaderId() == 0){
+            raftNode.setLeaderId(request.getLeaderId());
+            raftNode.setState(RaftNode.NodeState.FOLLOWER);
+            logger.info("new leaderId={}, conf={}", raftNode.getLeaderId(), raftNode.getRaftConfig().toString());
         }
 
         //1. 一些取小install snapshot的情况
@@ -212,7 +214,6 @@ public class RaftConsensusServiceImpl implements RaftConsensusService {
             logger.warn("already in take snapshot, do not handle install snapshot request now");
             return installSnapshotResponse;
         }
-
 
         raftNode.getWriteLock().lock();
         try {
@@ -300,16 +301,13 @@ public class RaftConsensusServiceImpl implements RaftConsensusService {
                 response.setMessage("the node is already in cluster");
                 return response;
             }
-            ConfigCommand addNodeCommand = new ConfigCommand();
-            Map<Long, String> newRaftGroupAddress = RaftConfig.parseRaftGroupAddress(raftNode.getRaftConfig().getRaftGroupAddress());
-            newRaftGroupAddress.put(request.getServerId(), request.getServerAddress());
-            addNodeCommand.setKey(RaftConfig.RAFT_GROUP_ADDRESS_Field);
-            addNodeCommand.setValue(RaftConfig.unParseRaftGroupAddress(newRaftGroupAddress));
-            LogEntry logEntry = new LogEntry(-1, raftNode.getCurrentTerm(), addNodeCommand);
-            System.out.println(logEntry);
+            MemberConfigCommand addNodeCommand = new MemberConfigCommand();
+            addNodeCommand.setKey(request.getServerId());
+            addNodeCommand.setValue(request.getServerAddress());
+            addNodeCommand.setType(MemberConfigCommand.Type.ADD);
             boolean success = false;
             try {
-                success = raftNode.replicateEntry(logEntry).get();
+                success = raftNode.replicateEntry(addNodeCommand).get();
                 response.setMessage("添加节点成功 ： ServerId :" + request.getServerId() + " " + request.getServerAddress());
             }catch (InterruptedException | ExecutionException e){
                 logger.warn(e.getMessage());
@@ -337,19 +335,20 @@ public class RaftConsensusServiceImpl implements RaftConsensusService {
                 response.setMessage("the node is not in cluster");
                 return response;
             }
-            ConfigCommand removeNodeCommand = new ConfigCommand();
-            Map<Long, String> newRaftGroupAddress = RaftConfig.parseRaftGroupAddress(raftNode.getRaftConfig().getRaftGroupAddress());
-            if (!newRaftGroupAddress.remove(request.getServerId()).equals(request.getServerAddress())){
+            MemberConfigCommand removeNodeCommand = new MemberConfigCommand();
+            Map<Long, String> newRaftGroupAddress = new HashMap<>(raftNode.getRaftConfig().getRaftGroupAddress());
+            if (!request.getServerAddress()
+                    .equals(raftNode.getRaftConfig().getRaftGroupAddress().get(request.getServerId()))){
                 response.setMessage("the node address is not correct");
                 return response;
             }
-            removeNodeCommand.setKey(RaftConfig.RAFT_GROUP_ADDRESS_Field);
-            removeNodeCommand.setValue(RaftConfig.unParseRaftGroupAddress(newRaftGroupAddress));
-            LogEntry logEntry = new LogEntry(-1, raftNode.getCurrentTerm(), removeNodeCommand);
+            removeNodeCommand.setKey(request.getServerId());
+            removeNodeCommand.setValue(request.getServerAddress());
+            removeNodeCommand.setType(MemberConfigCommand.Type.REMOVE);
 
             boolean success = false;
             try {
-                success = raftNode.replicateEntry(logEntry).get();
+                success = raftNode.replicateEntry(removeNodeCommand).get();
                 response.setMessage("删除节点成功 ： ServerId :" + request.getServerId() + " " + request.getServerAddress());
             }catch (InterruptedException | ExecutionException e){
                 logger.warn(e.getMessage());

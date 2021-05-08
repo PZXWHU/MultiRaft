@@ -1,6 +1,6 @@
 package com.pzx.raft.core.entity;
 
-public class SMCommand extends Command<byte[], byte[]> {
+public class SMCommand extends KVCommand<byte[], byte[]> {
     public SMCommand() {
     }
 

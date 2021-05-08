@@ -88,15 +88,15 @@ RaftKVClientService raftKVClientService = proxyConfig.getProxy(RaftKVClientServi
 
 ```java
 
-ClientKVResponse clientKVResponse = raftKVClientService.operateKV(ClientKVRequest.builder().type(ClientKVRequest.PUT).key("pzx").value("sx").build());
-System.out.println(clientKVResponse);
+ClientKVResponse KVClientResponse = raftKVClientService.operateKV(ClientKVRequest.builder().type(ClientKVRequest.PUT).key("pzx").value("sx").build());
+System.out.println(KVClientResponse);
 ```
 
 #### 获取数据
 
 ```java
-ClientKVResponse clientKVResponse = raftKVClientService.operateKV(ClientKVRequest.builder().type(ClientKVRequest.GET).key("pzx").build());
-System.out.println(clientKVResponse);
+ClientKVResponse KVClientResponse = raftKVClientService.operateKV(ClientKVRequest.builder().type(ClientKVRequest.GET).key("pzx").build());
+System.out.println(KVClientResponse);
 ```
 
 ### 集群节点变更

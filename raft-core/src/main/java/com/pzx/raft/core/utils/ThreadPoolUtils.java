@@ -16,7 +16,7 @@ public class ThreadPoolUtils {
         if (scheduledThreadPool == null){
             synchronized (ThreadPoolFactory.class){
                 if (scheduledThreadPool == null)
-                    scheduledThreadPool = Executors.newScheduledThreadPool(3);
+                    scheduledThreadPool = Executors.newScheduledThreadPool(5);
             }
         }
         return scheduledThreadPool;
@@ -26,7 +26,7 @@ public class ThreadPoolUtils {
         if (executorThreadPool == null){
             synchronized (ThreadPoolFactory.class){
                 if (executorThreadPool == null)
-                    executorThreadPool = Executors.newScheduledThreadPool(3);
+                    executorThreadPool = Executors.newScheduledThreadPool(5);
             }
         }
         return executorThreadPool;

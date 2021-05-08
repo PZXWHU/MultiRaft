@@ -1,5 +1,6 @@
 package com.pzx.raft.core.entity;
 
+import com.pzx.raft.core.RaftLogStorage;
 import lombok.*;
 
 /**
@@ -19,5 +20,10 @@ public class LogEntry {
     private long term;
 
     private Command command;
+
+    public void onWrite(RaftLogStorage raftLogStorage){
+
+    }
+
 
 }

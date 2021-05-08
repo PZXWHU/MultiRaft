@@ -1,15 +1,26 @@
 package com.pzx.raft.kv.meta;
 
+import com.pzx.raft.kv.entity.RegionInfo;
+import com.pzx.raft.kv.entity.StoreInfo;
+
+import java.util.concurrent.locks.Lock;
+
 public interface MetaStorage {
 
-    StoreMeta getStoreMeta(long StoreId);
+    StoreInfo getStoreInfo(long storeId);
 
-    boolean updateStoreMeta(StoreMeta storeMeta);
+    boolean updateStoreInfo(StoreInfo storeInfo);
 
-    RegionMeta getRegionReta(long regionId);
+    RegionInfo getRegionInfo(long regionId);
 
-    boolean updateRegionMeta(RegionMeta regionMeta);
+    boolean updateRegionInfo(RegionInfo regionInfo);
 
     long createRegionId();
+
+    long getMaxRegionId();
+
+    Lock getWriteLock();
+
+    Lock getReadLock();
 
 }

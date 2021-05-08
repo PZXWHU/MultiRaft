@@ -19,6 +19,10 @@ public class CallbackInvoker extends AbstractInvoker {
 
     private final static Logger logger = LoggerFactory.getLogger(CallbackInvoker.class);
 
+    public CallbackInvoker(RpcClient rpcClient) {
+        super(rpcClient);
+    }
+
     public CallbackInvoker(RpcClient rpcClient, long timeout) {
         super(rpcClient, timeout);
     }
@@ -27,7 +31,31 @@ public class CallbackInvoker extends AbstractInvoker {
     protected RpcResponse doInvoke(RpcRequest rpcRequest) {
 
         RpcResponseCallBack rpcResponseCallBack = RpcInvokeContext.getContext().getResponseCallback();
-        RpcInvokeContext.getContext().setResponseCallback(null);//将callback赋值为null，避免被下一次rpc所使用。
+        CompletableFuture<RpcResponse> resultFuture =  rpcClient.sendRequest(rpcRequest);
+        //CallbackInvoke ： 为resultFuture设置callback
+        if (rpcResponseCallBack != null){
+            resultFuture.whenCompleteAsync((rpcResponse, throwable)->{
+
+                checkRpcServerError(rpcRequest, rpcResponse);
+                if (throwable != null)
+                    rpcResponseCallBack.onException(throwable);
+                else if(rpcResponse.getStatusCode() == ResponseCode.METHOD_INVOKER_SUCCESS.getCode())
+                    rpcResponseCallBack.onResponse(rpcResponse.getData());
+                else
+                    rpcResponseCallBack.onException(new RpcException(RpcError.RPC_INVOKER_FAILED, rpcResponse.getMessage()));
+            }).whenCompleteAsync((rpcResponse, throwable)-> {
+                if (throwable != null)
+                    throwable.printStackTrace();
+            });
+        }
+
+        setTimeoutCheckAsync(rpcRequest, timeout);
+
+        return RpcResponse.EMPTY_RESPONSE;
+    }
+
+
+/*    public void doInvokeAsync(RpcRequest rpcRequest, RpcResponseCallBack rpcResponseCallBack){
 
         CompletableFuture<RpcResponse> resultFuture =  rpcClient.sendRequest(rpcRequest);
         //CallbackInvoke ： 为resultFuture设置callback
@@ -42,9 +70,7 @@ public class CallbackInvoker extends AbstractInvoker {
                     rpcResponseCallBack.onException(new RpcException(RpcError.RPC_INVOKER_FAILED, rpcResponse.getMessage()));
             }, AsyncRuntime.getAsyncThreadPool());
         }
-
         setTimeoutCheckAsync(rpcRequest, timeout);
+    }*/
 
-        return RpcResponse.EMPTY_RESPONSE;
-    }
 }

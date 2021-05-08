@@ -7,11 +7,17 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class RpcInvokeContext {
 
+    public static final Lock lock = new ReentrantLock();
+
     /**
      * 线程上下文变量
+     * 线程私有，非常关键！
+     * 在单个线程内不会有并发问题，所以利用RpcInvokeContext.setRpcResponseCallback 和RpcInvokeContext.getFuture是不会出现问题的
      */
     protected static final ThreadLocal<RpcInvokeContext> LOCAL = new ThreadLocal<RpcInvokeContext>();
 
@@ -46,7 +52,6 @@ public class RpcInvokeContext {
      * @param rpcResponse
      */
     public static void completeFuture(RpcResponse rpcResponse){
-
         CompletableFuture<RpcResponse> future = uncompletedFutures.remove(rpcResponse.getRequestId());
         if (null != future) {
             future.complete(rpcResponse);
@@ -108,12 +113,12 @@ public class RpcInvokeContext {
     /**
      * 用户自定义Callback，单次调用生效
      */
-    protected RpcResponseCallBack responseCallback;
+    protected RpcResponseCallBack responseCallBack;
 
     /**
      * The Future.
      */
-    protected Future<?> future;
+    protected CompletableFuture<?> completableFuture;
 
     /**
      * 自定义属性
@@ -166,17 +171,19 @@ public class RpcInvokeContext {
      * @return 单次请求的指定回调方法
      */
     public RpcResponseCallBack getResponseCallback() {
-        return responseCallback;
+        RpcResponseCallBack callBack = this.responseCallBack;
+        this.responseCallBack = null;
+        return callBack;
     }
 
     /**
      * 设置单次请求的指定回调方法
      *
-     * @param responseCallback 单次请求的指定回调方法
+     * @param callback 单次请求的指定回调方法
      * @return RpcInvokeContext
      */
-    public RpcInvokeContext setResponseCallback(RpcResponseCallBack responseCallback) {
-        this.responseCallback = responseCallback;
+    public RpcInvokeContext setResponseCallBack(RpcResponseCallBack callback) {
+        this.responseCallBack = callback;
         return this;
     }
 
@@ -187,8 +194,10 @@ public class RpcInvokeContext {
      * @return 异步Future对象
      */
     @SuppressWarnings("unchecked")
-    public <T> Future<T> getFuture() {
-        return (Future<T>) future;
+    public <T> CompletableFuture<T> getFuture() {
+        CompletableFuture future = this.completableFuture;
+        this.completableFuture = null;
+        return future;
     }
 
     /**
@@ -197,8 +206,8 @@ public class RpcInvokeContext {
      * @param future Future对象
      * @return RpcInvokeContext
      */
-    public RpcInvokeContext setFuture(Future<?> future) {
-        this.future = future;
+    public RpcInvokeContext setFuture(CompletableFuture<?> future) {
+        this.completableFuture = future;
         return this;
     }
 

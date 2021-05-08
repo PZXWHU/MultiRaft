@@ -7,6 +7,7 @@ import lombok.Getter;
 @Getter
 public enum  RpcError {
 
+    INVOKE_TYPE_NOT_FOUND("rpc调用类型无法找到"),
     BAD_CONNECTION("无法正常连接"),
     RPC_INVOKER_FAILED("Rpc调用失败"),
     RPC_INVOKER_TIMEOUT("Rpc调用超时"),

@@ -1,18 +1,16 @@
 package com.pzx.raft.core.node;
 
+import com.alibaba.nacos.common.utils.ConcurrentHashSet;
 import com.pzx.raft.core.RaftLogStorage;
 import com.pzx.raft.core.RaftMetaStorage;
 import com.pzx.raft.core.config.NodeConfig;
 import com.pzx.raft.core.config.RaftConfig;
 import com.pzx.raft.core.RaftStateMachine;
+import com.pzx.raft.core.entity.*;
 import com.pzx.raft.core.exception.RaftError;
 import com.pzx.raft.core.exception.RaftException;
 import com.pzx.raft.core.service.entity.*;
 import com.pzx.raft.core.utils.MyFileUtils;
-import com.pzx.raft.core.entity.ConfigCommand;
-import com.pzx.raft.core.entity.LogEntry;
-import com.pzx.raft.core.entity.SMCommand;
-import com.pzx.raft.core.utils.ThreadPoolUtils;
 import com.pzx.rpc.invoke.RpcResponseCallBack;
 import lombok.Getter;
 import lombok.Setter;
@@ -54,7 +52,7 @@ public class RaftNode {
     private RaftConfig raftConfig;
 
     //本节点的同伴节点
-    private ConcurrentMap<Long, Peer> peers = new ConcurrentHashMap<>();
+    private ConcurrentMap<Long, NodePeer> peers = new ConcurrentHashMap<>();
 
     //Raft日志:每个条目包含了用于状态机的命令、领导者接收到该条目时的任期以及条目在日志中的索引
     private RaftLogStorage raftLogStorage;
@@ -92,12 +90,6 @@ public class RaftNode {
     //表示自己获得的vote数
     private AtomicInteger voteGrantedNum = new AtomicInteger(0);
 
-    //表示选举过程的ScheduledFuture
-    private ScheduledFuture electionScheduledFuture;
-
-    //表示heartbeat的ScheduledFuture
-    private ScheduledFuture heartbeatScheduledFuture;
-
     //RaftNode内部锁，当对节点内部状态变量、日志、状态机、配置进行改变时，必须加锁以保证整体状态的一致性
     private ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
 
@@ -113,16 +105,27 @@ public class RaftNode {
     //RaftNode触发心跳、选举的scheduled线程池
     private ScheduledExecutorService scheduledExecutorService;
 
+    //表示选举过程的ScheduledFuture
+    private ScheduledFuture electionScheduledFuture;
+
+    //表示heartbeat的ScheduledFuture
+    private ScheduledFuture heartbeatScheduledFuture;
+
+    //表示snapshot的scheduledFuture
+    private ScheduledFuture snapshotScheduledFuture;
+
     //复制日志的future
     private ConcurrentHashMap<Long, CompletableFuture<Boolean>> replicateEntryFutureMap = new ConcurrentHashMap<>();
+
+    private ConcurrentHashSet<UserDefinedCommandListener> userDefinedCommandListeners = new ConcurrentHashSet<>();
 
     //服务器id
     private long serverId;
 
+    //raft group id
     private long groupId;
 
     private NodeConfig nodeConfig;
-
 
     public RaftNode(NodeConfig nodeConfig){
 
@@ -136,16 +139,16 @@ public class RaftNode {
 
         recover();//恢复上一次宕机的状态
 
-        this.executorService = ThreadPoolUtils.newThreadPoolExecutor(raftConfig.getRaftConsensusThreadNum(), raftConfig.getRaftConsensusThreadNum(),
-                60, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
-        this.scheduledExecutorService = ThreadPoolUtils.getScheduledThreadPool();
+        this.executorService = Executors.newFixedThreadPool(raftConfig.getRaftConsensusThreadNum());
+        this.scheduledExecutorService = Executors.newScheduledThreadPool(3);
     }
 
     public void start(){
         //重置选举定时器
         resetElectionTimer();
         //开启快照任务
-        scheduledExecutorService.scheduleWithFixedDelay(
+        if (snapshotScheduledFuture == null)
+            snapshotScheduledFuture = scheduledExecutorService.scheduleAtFixedRate(
                 ()->takeSnapshot(),
                 raftConfig.getSnapshotPeriodSeconds(),
                 raftConfig.getSnapshotPeriodSeconds(),
@@ -153,15 +156,25 @@ public class RaftNode {
 
     }
 
+    public void stop(){
+        if (executorService != null)
+            executorService.shutdown();
+        if (scheduledExecutorService != null)
+            scheduledExecutorService.shutdown();
+    }
+
     /**---------------------------------------初始化----------------------------**/
 
     private void updatePeers(){
         //初始化同伴节点
-        peers.clear();
-        for(Map.Entry<Long, String> entry : RaftConfig.parseRaftGroupAddress(raftConfig.getRaftGroupAddress()).entrySet()){
+        for (Long serverId : peers.keySet()){
+            if (!raftConfig.getRaftGroupAddress().containsKey(serverId))
+                peers.remove(serverId);
+        }
 
+        for(Map.Entry<Long, String> entry : raftConfig.getRaftGroupAddress().entrySet()){
             if (entry.getKey() != serverId)
-                this.peers.put(entry.getKey(), new Peer(entry.getKey(), entry.getValue(), raftLogStorage.getLastIndex() + 1));
+                this.peers.put(entry.getKey(), new NodePeer(entry.getKey(), entry.getValue(), raftLogStorage.getLastIndex() + 1));
         }
     }
 
@@ -219,29 +232,30 @@ public class RaftNode {
             writeLock.unlock();
         }
 
-        for (Peer peer : peers.values()){
-            executorService.submit(()->requestVote(peer));
+        for (NodePeer nodePeer : peers.values()){
+            executorService.submit(()->requestVote(nodePeer));
         }
 
     }
 
-    private void requestVote(Peer peer){
+    private void requestVote(NodePeer nodePeer){
         ReqVoteRequest reqVoteRequest = ReqVoteRequest.builder()
+                .groupId(groupId)
                 .candidateId(this.serverId)
                 .candidateTerm(currentTerm)
                 .lastLogIndex(raftLogStorage.getLastIndex())
                 .lastLogTerm(getLastLogTerm())
                 .build();
-        peer.requestVote(reqVoteRequest, new ReqVoteResponseCallback(peer, reqVoteRequest));
+        nodePeer.requestVote(reqVoteRequest, new ReqVoteResponseCallback(nodePeer, reqVoteRequest));
     }
 
     private class ReqVoteResponseCallback implements RpcResponseCallBack{
 
-        private final Peer peer;
+        private final NodePeer nodePeer;
         private final ReqVoteRequest reqVoteRequest;
 
-        public ReqVoteResponseCallback(Peer peer, ReqVoteRequest reqVoteRequest) {
-            this.peer = peer;
+        public ReqVoteResponseCallback(NodePeer nodePeer, ReqVoteRequest reqVoteRequest) {
+            this.nodePeer = nodePeer;
             this.reqVoteRequest = reqVoteRequest;
         }
 
@@ -262,12 +276,12 @@ public class RaftNode {
                 }
                 if (reqVoteResponse.getCurrentTerm() > currentTerm){
                     logger.info("Received RequestVote response from server {} in term {} (this server's term was {})",
-                            peer.getServerId(), reqVoteResponse.getCurrentTerm(), currentTerm);
+                            nodePeer.getServerId(), reqVoteResponse.getCurrentTerm(), currentTerm);
                     handleTermLag(reqVoteResponse.getCurrentTerm());
                 }else {
                     if (reqVoteResponse.isVoteGranted()){
                         int currentVoteGrantedNum  = voteGrantedNum.incrementAndGet();
-                        logger.info("Got vote from server {} for term {}, currentVoteGrantedNum={}", peer.getServerId(), currentTerm, currentVoteGrantedNum);
+                        logger.info("Got vote from server {} for term {}, currentVoteGrantedNum={}", nodePeer.getServerId(), currentTerm, currentVoteGrantedNum);
                         if (currentVoteGrantedNum > raftConfig.getRaftGroupSize() / 2){
                             logger.info("Got majority vote, serverId={} become leader", RaftNode.this.serverId);
                             becomeLeader();
@@ -281,7 +295,7 @@ public class RaftNode {
         }
         @Override
         public void onException(Throwable throwable) {
-            logger.error("requestVote with peer[{}] failed : {}", peer.getPeerAddress(), throwable.getMessage());
+            logger.error("requestVote with nodePeer[{}] failed : {}", nodePeer.getPeerAddress(), throwable.getMessage());
         }
     }
 
@@ -291,8 +305,8 @@ public class RaftNode {
             state = NodeState.LEADER;
             leaderId = this.serverId;
             //当一个领导人刚获得权力的时候，他初始化所有的 nextIndex 值为自己的最后一条日志的 index 加 1
-            for(Peer peer : peers.values()){
-                peer.setNextIndex(raftLogStorage.getLastIndex() + 1);
+            for(NodePeer nodePeer : peers.values()){
+                nodePeer.setNextIndex(raftLogStorage.getLastIndex() + 1);
             }
         }finally {
             writeLock.unlock();
@@ -326,18 +340,18 @@ public class RaftNode {
      */
     private void startNewHeartbeat() {
         logger.info("start new heartbeat, peers={}", peers.keySet());
-        for (Peer peer : peers.values()) {
-            executorService.submit(()->appendEntries(peer));//发送心跳
+        for (NodePeer nodePeer : peers.values()) {
+            executorService.submit(()->appendEntries(nodePeer));//发送心跳
         }
         resetHeartbeatTimer();
     }
 
     /**
      * 复制logEntry
-     * @param logEntry
+     * @param command
      * @return
      */
-    public CompletableFuture<Boolean>  replicateEntry(LogEntry logEntry){
+    public CompletableFuture<Boolean>  replicateEntry(Command command){
         CompletableFuture<Boolean> future = new CompletableFuture<>();
         if (state != NodeState.LEADER) {
             logger.debug("I'm not the leader");
@@ -345,9 +359,8 @@ public class RaftNode {
             return future;
         }
 
-
         //1. 将日志写入本地日志，并复制到所有节点
-        long replicateEntryIndex = raftLogStorage.write(logEntry);
+        long replicateEntryIndex = writeLogEntry(command);
 
         //2. 如果配置中不要求写入大部分节点，则直接返回
         if (raftConfig.isAsyncWrite()) {
@@ -362,19 +375,32 @@ public class RaftNode {
 
     }
 
+    public long writeLogEntry(Command command){
+        LogEntry logEntry = new LogEntry();
+        logEntry.setTerm(currentTerm);
+        logEntry.setCommand(command);
+        long logEntryIndex = raftLogStorage.write(logEntry);
+        if (logEntry.getCommand() instanceof UserDefinedCommand){
+            for(UserDefinedCommandListener userDefinedCommandListener : userDefinedCommandListeners){
+                userDefinedCommandListener.onWrite((UserDefinedCommand) logEntry.getCommand(), logEntryIndex, currentTerm);
+            }
+        }
+        return logEntryIndex;
+    }
+
     /**
      * 1. 检查是否要进行install snapshot
      * 2. 创建AppendEntriesRequest
      * 3. 发送appendEntriesRequest
      */
-    private void appendEntries(Peer peer){
+    private void appendEntries(NodePeer nodePeer){
         //1. 检查是否要进行install snapshot
         boolean isNeedInstallSnapshot = false;
         raftLogStorage.getWriteLock().lock();
         try {
             long firstLogIndex = raftLogStorage.getLastIndex() - raftLogStorage.getTotalSize() + 1;
 
-            if (peer.getNextIndex() < firstLogIndex){
+            if (nodePeer.getNextIndex() < firstLogIndex){
                 isNeedInstallSnapshot = true;
             }
         }finally {
@@ -382,9 +408,9 @@ public class RaftNode {
         }
 
         if (isNeedInstallSnapshot) {
-            logger.info("is need snapshot={}, peer={}", isNeedInstallSnapshot, peer.getPeerAddress());
+            logger.info("is need snapshot={}, nodePeer={}", isNeedInstallSnapshot, nodePeer.getPeerAddress());
             //等待install 快照完成
-            if (!installSnapshot(peer)) {
+            if (!installSnapshot(nodePeer)) {
                 return;
             }
         }
@@ -393,7 +419,7 @@ public class RaftNode {
         AppendEntriesRequest appendEntriesRequest = AppendEntriesRequest.builder().build();
         readLock.lock();
         try {
-            long prevLogIndex = peer.getNextIndex() - 1;
+            long prevLogIndex = nodePeer.getNextIndex() - 1;
             long prevLogTerm;
             // 判断prevLogTerm能否直接从日志中获得
             if (prevLogIndex == 0)
@@ -403,13 +429,14 @@ public class RaftNode {
             else
                 prevLogTerm = raftLogStorage.read(prevLogIndex).getTerm();
 
+            appendEntriesRequest.setGroupId(groupId);
             appendEntriesRequest.setLeaderId(serverId);
             appendEntriesRequest.setLeaderTerm(currentTerm);
             appendEntriesRequest.setPrevLogIndex(prevLogIndex);
             appendEntriesRequest.setPrevLogTerm(prevLogTerm);
-            long lastIndex = Math.min(raftLogStorage.getLastIndex(), peer.getNextIndex() + raftConfig.getMaxLogEntriesPerRequest() - 1);
+            long lastIndex = Math.min(raftLogStorage.getLastIndex(), nodePeer.getNextIndex() + raftConfig.getMaxLogEntriesPerRequest() - 1);
             List<LogEntry> logEntries = new ArrayList<>();
-            for (long index = peer.getNextIndex(); index <= lastIndex; index++) {
+            for (long index = nodePeer.getNextIndex(); index <= lastIndex; index++) {
                 logEntries.add(raftLogStorage.read(index));
             }
             appendEntriesRequest.setEntries(logEntries.size() == 0 ? null : logEntries);
@@ -418,18 +445,18 @@ public class RaftNode {
             readLock.unlock();
         }
         //3. 发送appendEntriesRequest
-        peer.appendEntries(appendEntriesRequest, new AppendEntriesResponseCallback(peer, appendEntriesRequest));
+        nodePeer.appendEntries(appendEntriesRequest, new AppendEntriesResponseCallback(nodePeer, appendEntriesRequest));
 
     }
 
 
     private class AppendEntriesResponseCallback implements RpcResponseCallBack{
 
-        private Peer peer;
+        private NodePeer nodePeer;
         private AppendEntriesRequest appendEntriesRequest;
 
-        public AppendEntriesResponseCallback(Peer peer, AppendEntriesRequest appendEntriesRequest) {
-            this.peer = peer;
+        public AppendEntriesResponseCallback(NodePeer nodePeer, AppendEntriesRequest appendEntriesRequest) {
+            this.nodePeer = nodePeer;
             this.appendEntriesRequest = appendEntriesRequest;
         }
 
@@ -446,17 +473,20 @@ public class RaftNode {
                 handleTermLag(appendEntriesResponse.getCurrentTerm());
             else {
                 if (appendEntriesResponse.isSuccess()){
-                    peer.setMatchIndex(appendEntriesRequest.getPrevLogIndex() + appendEntriesRequest.getEntries().size());
-                    peer.setNextIndex(peer.getMatchIndex() + 1);
+                    int deltaSize = appendEntriesRequest.getEntries() == null ? 0 : appendEntriesRequest.getEntries().size();
+                    nodePeer.setMatchIndex(appendEntriesRequest.getPrevLogIndex() + deltaSize);
+                    nodePeer.setNextIndex(nodePeer.getMatchIndex() + 1);
                     mayAdvanceCommitIndex();
-                }else
-                    if (peer.getNextIndex() > 1) peer.setNextIndex(peer.getNextIndex() - 1);
+                }else {
+                    if (nodePeer.getNextIndex() > 1) nodePeer.setNextIndex(nodePeer.getNextIndex() - 1);
+                }
             }
+
         }
 
         @Override
         public void onException(Throwable throwable) {
-            logger.error("appendEntries with peer[{}] failed : {}", peer.getPeerAddress(), throwable.getMessage());
+            logger.error("appendEntries with nodePeer[{}] failed : {}", nodePeer.getPeerAddress(), throwable.getMessage());
         }
     }
 
@@ -472,15 +502,16 @@ public class RaftNode {
             //1. 通过各节点matchIndex判断最大的newCommitIndex
             List<Long> matchIndexes = new ArrayList<>();
             matchIndexes.add(raftLogStorage.getLastIndex());
-            for(Peer peer : peers.values()){
-                matchIndexes.add(peer.getMatchIndex());
+            for(NodePeer nodePeer : peers.values()){
+                matchIndexes.add(nodePeer.getMatchIndex());
             }
             Collections.sort(matchIndexes);
+
             long newCommitIndex = matchIndexes.get((matchIndexes.size() - 1) / 2);
             logger.debug("newCommitIndex={}, oldCommitIndex={}", newCommitIndex, commitIndex);
 
             //2. 判断newCommitIndex是否有效
-            if (raftLogStorage.read(newCommitIndex).getTerm() != currentTerm) {
+            if (newCommitIndex != 0 && raftLogStorage.read(newCommitIndex).getTerm() != currentTerm) {
                 //leader不能提交之前的任期内的日志
                 logger.debug("newCommitIndexTerm={}, currentTerm={}", raftLogStorage.read(newCommitIndex).getTerm(), currentTerm);
                 return;
@@ -490,22 +521,19 @@ public class RaftNode {
             }
 
             //3. newCommitIndex有效，更改节点commitIndex，并持久化。并将新提交的日志条目应用到状态机中
-            long oldCommitIndex = commitIndex;
+            long oldLastAppliedIndex = lastAppliedIndex;
             commitIndex = newCommitIndex;
 
-            for (long index = oldCommitIndex + 1; index <= newCommitIndex; index++) {
+            for (long index = oldLastAppliedIndex + 1; index <= newCommitIndex; index++) {
                 LogEntry logEntry = raftLogStorage.read(index);
-                if (logEntry.getCommand() instanceof SMCommand)
-                    raftStateMachine.apply(logEntry);
-                else if (logEntry.getCommand() instanceof ConfigCommand)
-                    applyConfiguration(logEntry);
+                applyCommand(logEntry.getCommand());
                 lastAppliedIndex = index;
                 raftMetaStorage.setLastAppliedIndex(lastAppliedIndex);
             }
             //4. 唤醒所有等待commitIndex的future
 
             logger.info("commitIndex={} lastAppliedIndex={}", commitIndex, lastAppliedIndex);
-            for(Long i = oldCommitIndex + 1; i <= commitIndex && replicateEntryFutureMap.containsKey(i); i++){
+            for(Long i = oldLastAppliedIndex + 1; i <= commitIndex && replicateEntryFutureMap.containsKey(i); i++){
                 replicateEntryFutureMap.remove(i).complete(true);
             }
         }finally {
@@ -518,7 +546,7 @@ public class RaftNode {
 
     /**---------------------------------------快照与恢复-----------------------------------**/
 
-    public boolean installSnapshot(Peer peer) {
+    public boolean installSnapshot(NodePeer nodePeer) {
         //1. 一些取消installSnapshot的情况
         if (isTakeSnapshot.get()) {
             logger.info("already in take snapshot, please send install snapshot request later");
@@ -540,7 +568,6 @@ public class RaftNode {
             //3. 将所有的快照数据分块发送
             int fileCount = 0;
             for(Map.Entry<String, byte[]> entry : snapshotFileData.entrySet()){
-                System.out.println(entry.getKey());
 
                 if (++fileCount == snapshotFileData.size()) isLastFile = true;
                 String fileName = entry.getKey();
@@ -556,6 +583,7 @@ public class RaftNode {
 
                     byte[] snapshotBytes = Arrays.copyOfRange(fileData, fileDataOffset, fileDataOffset + snapshotBytesThisRequest);
                     InstallSnapshotRequest installSnapshotRequest = InstallSnapshotRequest.builder()
+                            .groupId(groupId)
                             .snapshotFileName(fileName)
                             .data(snapshotBytes)
                             .leaderId(leaderId)
@@ -566,7 +594,7 @@ public class RaftNode {
                             .done(isLastRequest)
                             .build();
 
-                    InstallSnapshotResponse installSnapshotResponse = peer.getRaftConsensusServiceSync().installSnapshot(installSnapshotRequest);
+                    InstallSnapshotResponse installSnapshotResponse = nodePeer.getRaftConsensusServiceSync().installSnapshot(installSnapshotRequest);
                     if (installSnapshotResponse == null)
                         return false;
                     else if (installSnapshotResponse.getCurrentTerm() > currentTerm){
@@ -582,7 +610,7 @@ public class RaftNode {
                 }
             }
 
-            peer.setNextIndex(raftMetaStorage.getSnapshotLastIncludedIndex() + 1);
+            nodePeer.setNextIndex(raftMetaStorage.getSnapshotLastIncludedIndex() + 1);
         }catch (Exception e){
             e.printStackTrace();
             logger.error("install snapshot failed ：" + e);
@@ -605,7 +633,7 @@ public class RaftNode {
             return;
         }
         if (raftLogStorage.getTotalSize() < raftConfig.getSnapshotMinLogSize()) {
-            System.out.println(raftLogStorage.getTotalSize() + " " + raftConfig.getSnapshotMinLogSize());
+
             logger.info("the log is smaller than snapshotMinLogSize, ignore take snapshot");
             return;
         }
@@ -672,7 +700,7 @@ public class RaftNode {
         loadMeta();
         loadSnapshot();
         loadRaftLog();
-        System.out.println(this);
+        logger.info(this.toString());
 
 
     }
@@ -707,6 +735,7 @@ public class RaftNode {
             lastAppliedIndex = Math.max(lastAppliedIndex, raftMetaStorage.getSnapshotLastIncludedIndex());
             commitIndex = Math.max(commitIndex, raftMetaStorage.getSnapshotLastIncludedIndex());
         }catch (Exception e){
+            //e.printStackTrace();
             throw new RaftException(RaftError.LOAD_SNAPSHOT_ERROR, e.toString());
         }finally {
             writeLock.unlock();
@@ -719,10 +748,7 @@ public class RaftNode {
         try {
             for(long index = raftMetaStorage.getSnapshotLastIncludedIndex() + 1; index <= lastAppliedIndex; index++){
                 LogEntry logEntry = raftLogStorage.read(index);
-                if (logEntry.getCommand() instanceof SMCommand)
-                    raftStateMachine.apply(logEntry);
-                else if (logEntry.getCommand() instanceof ConfigCommand)
-                    applyConfiguration(logEntry);
+                applyCommand(logEntry.getCommand());
             }
         }finally {
             writeLock.unlock();
@@ -737,19 +763,34 @@ public class RaftNode {
      * 更改日志条目中对应的配置
      * https://segmentfault.com/a/1190000022796386
      * https://www.cnblogs.com/foxmailed/p/7190642.html
-     * @param logEntry
      */
-    public void applyConfiguration(LogEntry logEntry) {
-        ConfigCommand command = (ConfigCommand) logEntry.getCommand();
-        raftConfig.set(command.getKey(), command.getValue());
-        //更新同伴节点
-        if (command.getKey().equals(RaftConfig.RAFT_GROUP_ADDRESS_Field))
-            updatePeers();
+    public void applyMemberConfiguration(MemberConfigCommand command) {
+        if(command.getType() == MemberConfigCommand.Type.ADD)
+            raftConfig.getRaftGroupAddress().put(command.getKey(), command.getValue());
+        else if (command.getType() == MemberConfigCommand.Type.REMOVE)
+            raftConfig.getRaftGroupAddress().remove(command.getKey());
+
+        updatePeers();
 
         logger.info("set conf :{} = {}, leaderId={}", command.getKey(), command.getValue(), leaderId);
     }
 
     /**---------------------------------utils method-------------------------------**/
+
+    public void applyCommand(Command command){
+
+        if (command instanceof EmptyCommand)
+            return;
+        if (command instanceof SMCommand)
+            raftStateMachine.apply((SMCommand) command);
+        else if (command instanceof MemberConfigCommand)
+            applyMemberConfiguration((MemberConfigCommand) command);
+        else if (command instanceof UserDefinedCommand){
+            for(UserDefinedCommandListener userDefinedCommandListener : userDefinedCommandListeners)
+                userDefinedCommandListener.onApply((UserDefinedCommand) command);
+        }
+    }
+
 
 
     /**
@@ -798,6 +839,13 @@ public class RaftNode {
         return state.equals(NodeState.LEADER);
     }
 
+    public void addUserDefinedCommandListener(UserDefinedCommandListener userDefinedCommandListener){
+        userDefinedCommandListeners.add(userDefinedCommandListener);
+    }
+
+    public void removeUserDefinedCommandListener(UserDefinedCommandListener userDefinedCommandListener){
+        userDefinedCommandListeners.remove(userDefinedCommandListener);
+    }
 
     @Override
     public String toString() {
@@ -810,6 +858,7 @@ public class RaftNode {
                 ", lastAppliedIndex=" + lastAppliedIndex +
                 ", serverId=" + serverId +
                 ", groupId=" + groupId +
+                ", raftConfig=" + raftConfig +
                 '}';
     }
 }

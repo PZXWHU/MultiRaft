@@ -28,6 +28,11 @@
             <artifactId>kv-core</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.pzx</groupId>
+            <artifactId>kv-pd</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
 </project>

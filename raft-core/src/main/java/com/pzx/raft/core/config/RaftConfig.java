@@ -47,7 +47,7 @@ public class RaftConfig implements Snapshot {
     // log entry大小达到snapshotMinLogSize，才做snapshot
     public int snapshotMinLogSize = 100 * 1024 * 1024;
 
-    public int maxLogEntriesPerRequest = 50;
+    public int maxLogEntriesPerRequest = 1000;
 
     public int maxSnapshotBytesPerRequest = 100 * 1024 * 1024;
 
@@ -62,7 +62,7 @@ public class RaftConfig implements Snapshot {
     public boolean asyncWrite = false;
 
     //raft复制组的地址
-    public String raftGroupAddress;
+    public Map<Long, String> raftGroupAddress;
 
     public void set(String fieldName, Object value){
         try {
@@ -100,7 +100,7 @@ public class RaftConfig implements Snapshot {
     }
     */
 
-    public static Map<Long, String> parseRaftGroupAddress(String raftGroupAddress){
+/*    public static Map<Long, String> parseRaftGroupAddress(String raftGroupAddress){
         Map<Long, String> raftGroupAddressMap = new HashMap<>();
         for(String server : raftGroupAddress.split(",")){
             String[] arr = server.split("-");
@@ -115,10 +115,14 @@ public class RaftConfig implements Snapshot {
             stringJoiner.add(entry.getKey() + "-" + entry.getValue());
         }
         return stringJoiner.toString();
-    }
+    }*/
 
-    public int getRaftGroupSize(){
+    /*public int getRaftGroupSize(){
         return raftGroupAddress.split(",").length;
+    }*/
+
+     public int getRaftGroupSize(){
+        return raftGroupAddress.size();
     }
 
 
@@ -140,8 +144,13 @@ public class RaftConfig implements Snapshot {
         if(!(new File(snapshotDirPath).exists())) return;
         RaftConfig raftConfig = MyFileUtils.readObjectFromFile(snapshotFile, RaftConfig.class);
         for(Field field : clazz.getFields()){
-            if (!Modifier.isFinal(field.getModifiers()))
-                set(field.getName(), raftConfig.get(field.getName()));
+            if (!Modifier.isFinal(field.getModifiers())){
+                if(field.getName().equals(RAFT_GROUP_ADDRESS_Field)){
+                    raftGroupAddress.putAll(raftConfig.getRaftGroupAddress());
+                }else
+                    set(field.getName(), raftConfig.get(field.getName()));
+            }
+
         }
     }
 

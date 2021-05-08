@@ -16,6 +16,8 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GenericFutureListener;
 import lombok.Builder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +35,10 @@ public class NettyServer extends AbstractRpcServer {
     private final ServiceProvider serviceProvider;
     private final RpcSerDe rpcSerDe;
     private final boolean autoScanService;
+    private final EventLoopGroup bossGroup;
+    private final EventLoopGroup workerGroup;
+    private final EventExecutorGroup businessGroup;//业务线程池
+
 
     private NettyServer(Builder builder){
         this.serverAddress = builder.serverAddress;
@@ -40,6 +46,10 @@ public class NettyServer extends AbstractRpcServer {
         this.serviceProvider =  new MemoryServiceProvider();
         this.rpcSerDe = RpcSerDe.getByCode(DEFAULT_SERDE_CODE);
         this.autoScanService = builder.autoScanService;
+
+        this.bossGroup = new NioEventLoopGroup(1);
+        this.workerGroup = new NioEventLoopGroup();
+        this.businessGroup = new DefaultEventExecutorGroup(10);
     }
 
     @Override
@@ -51,38 +61,39 @@ public class NettyServer extends AbstractRpcServer {
 
     @Override
     public void start() {
-        new Thread(() -> {
-            if (this.autoScanService)
-                scanAndPublishServices();
 
-            EventLoopGroup bossGroup = new NioEventLoopGroup(1);
-            EventLoopGroup workerGroup = new NioEventLoopGroup();
-            EventExecutorGroup businessGroup = new DefaultEventExecutorGroup(10);//业务线程池
-            try {
-                ServerBootstrap serverBootstrap = new ServerBootstrap();
-                serverBootstrap.group(bossGroup, workerGroup)
-                        .channel(NioServerSocketChannel.class)
-                        .option(ChannelOption.SO_BACKLOG, 256)
-                        .childOption(ChannelOption.TCP_NODELAY, true)
-                        .childHandler(new ChannelInitializer<SocketChannel>() {
-                            @Override
-                            protected void initChannel(SocketChannel ch) throws Exception {
-                                ChannelPipeline pipeline = ch.pipeline();
-                                pipeline.addLast(new ProtocolNettyEncoder(rpcSerDe));
-                                pipeline.addLast(new ProtocolNettyDecoder());
-                                pipeline.addLast(businessGroup, new RpcRequestInboundHandler(serviceProvider));
-                            }
-                        });
-                ChannelFuture future = serverBootstrap.bind(serverAddress.getPort()).sync();
-                future.channel().closeFuture().sync();
+        if (this.autoScanService)
+            scanAndPublishServices();
 
-            } catch (InterruptedException e) {
-                logger.error("启动服务器时有错误发生: ", e);
-            } finally {
-                bossGroup.shutdownGracefully();
-                workerGroup.shutdownGracefully();
-            }
-        }).start();
+        try {
+            ServerBootstrap serverBootstrap = new ServerBootstrap();
+            serverBootstrap.group(bossGroup, workerGroup)
+                    .channel(NioServerSocketChannel.class)
+                    .option(ChannelOption.SO_BACKLOG, 256)
+                    .childOption(ChannelOption.TCP_NODELAY, true)
+                    .childHandler(new ChannelInitializer<SocketChannel>() {
+                        @Override
+                        protected void initChannel(SocketChannel ch) throws Exception {
+                            ChannelPipeline pipeline = ch.pipeline();
+                            pipeline.addLast(new ProtocolNettyEncoder(rpcSerDe));
+                            pipeline.addLast(new ProtocolNettyDecoder());
+                            pipeline.addLast(businessGroup, new RpcRequestInboundHandler(serviceProvider));
+                        }
+                    });
+            ChannelFuture future = serverBootstrap.bind(serverAddress.getPort()).sync();
+            future.channel().closeFuture().addListeners((future1 -> stop()));
+
+        } catch (InterruptedException e) {
+            logger.error("启动服务器时有错误发生: ", e);
+        }
+
+    }
+
+    @Override
+    public void stop() {
+        bossGroup.shutdownGracefully();
+        workerGroup.shutdownGracefully();
+        businessGroup.shutdownGracefully();
     }
 
     public static Builder builder(){

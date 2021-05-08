@@ -2,7 +2,6 @@ package com.pzx.raft.core.storage;
 
 import com.pzx.raft.core.RaftStateMachine;
 import com.pzx.raft.core.entity.SMCommand;
-import com.pzx.raft.core.entity.LogEntry;
 import com.pzx.raft.kv.KVStore;
 import com.pzx.raft.kv.KVPrefixAdapter;
 
@@ -24,9 +23,8 @@ public class KVRaftStateMachine implements RaftStateMachine {
     }
 
     @Override
-    public void apply(LogEntry logEntry) {
-        SMCommand command = (SMCommand) logEntry.getCommand();
-        kvPrefixAdapter.put(command.getKey(), command.getValue());
+    public void apply(SMCommand smCommand) {
+        kvPrefixAdapter.put(smCommand.getKey(), smCommand.getValue());
     }
 
     @Override
@@ -67,5 +65,9 @@ public class KVRaftStateMachine implements RaftStateMachine {
     @Override
     public Lock getReadLock() {
         return kvPrefixAdapter.getReadLock();
+    }
+
+    public KVPrefixAdapter getKvPrefixAdapter() {
+        return kvPrefixAdapter;
     }
 }

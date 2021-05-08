@@ -29,7 +29,7 @@ public class FutureInvoker extends AbstractInvoker {
         CompletableFuture<Object> contextFuture = resultFuture.thenApplyAsync((rpcResponse)->{
             checkRpcServerError(rpcRequest, rpcResponse);
             return rpcResponse.getData();
-        }, AsyncRuntime.getAsyncThreadPool());
+        });
 
         RpcInvokeContext.getContext().setFuture(contextFuture);
 
@@ -37,5 +37,19 @@ public class FutureInvoker extends AbstractInvoker {
 
         return RpcResponse.EMPTY_RESPONSE;
     }
+
+   /* public CompletableFuture<Object> doInvokeAsync(RpcRequest rpcRequest){
+
+        CompletableFuture<RpcResponse> resultFuture =  rpcClient.sendRequest(rpcRequest);
+        CompletableFuture<Object> contextFuture = resultFuture.thenApplyAsync((rpcResponse)->{
+            checkRpcServerError(rpcRequest, rpcResponse);
+            return rpcResponse.getData();
+        }, AsyncRuntime.getAsyncThreadPool());
+
+        setTimeoutCheckAsync(rpcRequest, timeout);
+
+        return contextFuture;
+
+    }*/
 
 }

@@ -18,22 +18,20 @@ import org.slf4j.LoggerFactory;
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 public class ChannelPool {
 
     private static final Logger logger = LoggerFactory.getLogger(ChannelPool.class);
     private static final Bootstrap bootstrap = initializeBootstrap();
     private static EventLoopGroup eventLoopGroup;
+    private static ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(3);
     private static Map<String, Channel> channels = new ConcurrentHashMap<>();
 
     private static Set<String> connectingChannels = ConcurrentHashMap.newKeySet();
     private static Map<String, InetSocketAddress> blackList = new ConcurrentHashMap<>();
     static {
-        ThreadPoolFactory.getScheduledThreadPool().scheduleWithFixedDelay(() -> {
+        scheduledExecutorService.scheduleWithFixedDelay(() -> {
             for (Map.Entry<String, InetSocketAddress> entry : blackList.entrySet()) {
                 if (connectingChannels.contains(entry.getKey()))
                     continue;
@@ -63,7 +61,6 @@ public class ChannelPool {
      */
     public static Channel get(InetSocketAddress inetSocketAddress, RpcSerDe rpcSerDe) throws InterruptedException, RpcConnectException{
         String key = (inetSocketAddress.toString() + rpcSerDe.getCode()).intern();//获取字符串常量池中的对象
-
         //当出现key相同时，由于字符串常量池的存在，相同key会是同一个对象
         synchronized (key){
 
@@ -114,16 +111,18 @@ public class ChannelPool {
 
     }
 
-    public static void close(){
+    public static void stop(){
         if (eventLoopGroup != null)
             eventLoopGroup.shutdownGracefully();
+        if (scheduledExecutorService != null)
+            scheduledExecutorService.shutdown();
         for(Channel channel : channels.values()){
             channel.close();
         }
     }
 
     private static Bootstrap initializeBootstrap() {
-        eventLoopGroup = new NioEventLoopGroup();
+        eventLoopGroup = new NioEventLoopGroup(5);
         Bootstrap bootstrap = new Bootstrap();
         bootstrap.group(eventLoopGroup)
                 .channel(NioSocketChannel.class)

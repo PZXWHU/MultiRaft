@@ -2,10 +2,9 @@ package com.pzx.rpc.service.proxy;
 
 import com.google.common.base.Preconditions;
 import com.pzx.rpc.enumeration.InvokeType;
-import com.pzx.rpc.invoke.CallbackInvoker;
-import com.pzx.rpc.invoke.FutureInvoker;
-import com.pzx.rpc.invoke.OneWayInvoker;
-import com.pzx.rpc.invoke.SyncInvoker;
+import com.pzx.rpc.enumeration.RpcError;
+import com.pzx.rpc.exception.RpcException;
+import com.pzx.rpc.invoke.*;
 import com.pzx.rpc.service.registry.NacosServiceRegistry;
 import com.pzx.rpc.service.registry.ServiceRegistry;
 import com.pzx.rpc.service.registry.ZkServiceRegistry;
@@ -46,6 +45,8 @@ public class ProxyConfig {
             case CALLBACK:
                 invocationHandler = new CallbackInvoker(rpcClient, timeout);
                 break;
+            default:
+                throw new RpcException(RpcError.INVOKE_TYPE_NOT_FOUND, invokeType.toString());
         }
 
         T proxy = (T) Proxy.newProxyInstance(clazz.getClassLoader(), new Class<?>[]{clazz}, invocationHandler);

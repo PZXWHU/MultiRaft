@@ -114,4 +114,14 @@ public class KVRaftMetaStorage implements RaftMetaStorage {
         return lastAppliedIndex;
     }
 
+    @Override
+    public byte[] getUserData(byte[] key) {
+        return kvPrefixAdapter.get(key);
+    }
+
+    @Override
+    public void setUserData(byte[] key, byte[] value) {
+        kvPrefixAdapter.put(key, value);
+    }
+
 }

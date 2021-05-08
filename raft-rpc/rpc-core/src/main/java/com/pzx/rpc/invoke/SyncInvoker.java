@@ -6,6 +6,7 @@ import com.pzx.rpc.transport.RpcClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDateTime;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -24,10 +25,10 @@ public class SyncInvoker extends AbstractInvoker {
         RpcResponse rpcResponse = RpcResponse.EMPTY_RESPONSE;
         CompletableFuture<RpcResponse> resultFuture =  rpcClient.sendRequest(rpcRequest);
         try {
-            rpcResponse = resultFuture.get(timeout, TimeUnit.MILLISECONDS);
-        }catch (TimeoutException e){
-            logger.error("RPC调用超时 ：" + rpcRequest);
-        }catch (InterruptedException | ExecutionException e) {
+            rpcResponse = resultFuture.get();
+        }/*catch (TimeoutException e){
+            logger.error("RPC调用超时 ：" + e + "  " + LocalDateTime.now());
+        }*/catch (InterruptedException | ExecutionException e) {
             logger.error("RPC调用失败 ：" + e);
         }
         checkRpcServerError(rpcRequest, rpcResponse);

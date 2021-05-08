@@ -54,7 +54,6 @@ public interface RaftLogStorage {
         return read(getLastIndex());
     }
 
-
     Lock getWriteLock();
 
     Lock getReadLock();

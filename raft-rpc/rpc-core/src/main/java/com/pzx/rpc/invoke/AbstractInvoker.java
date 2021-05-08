@@ -23,6 +23,10 @@ public abstract class AbstractInvoker implements InvocationHandler {
     protected final RpcClient rpcClient;
     protected final long timeout;
 
+    public AbstractInvoker(RpcClient rpcClient) {
+        this(rpcClient, 5000);
+    }
+
     public AbstractInvoker(RpcClient rpcClient, long timeout){
         this.rpcClient = rpcClient;
         this.timeout = timeout;

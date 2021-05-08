@@ -24,4 +24,8 @@ public interface RaftMetaStorage {
 
     long getLastAppliedIndex();
 
+    default byte[] getUserData(byte[] key){throw new  UnsupportedOperationException();}
+
+    default void setUserData(byte[] key, byte[] value) {throw new UnsupportedOperationException();}
+
 }

@@ -2,6 +2,7 @@ package com.pzx.raft.kv;
 
 import com.pzx.raft.core.utils.ByteUtils;
 import com.pzx.raft.kv.exception.StorageException;
+import com.sun.javafx.scene.layout.region.SliceSequenceConverter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.rocksdb.*;
@@ -27,6 +28,11 @@ public class RocksKVStore implements PerKVStore {
 
     private String dbDirPath;
 
+    //记录db中的最大的key，用于getApproximateKeysInRange函数和getAverageKVSize函数中，不必要精确，只需要大于等于db中的最大key即可
+    private byte[] maxKey;
+
+    private static final String MAX_VALUE = "max_value";
+
     private final List<ColumnFamilyDescriptor> cfDescriptors = new ArrayList<>();
 
     private ColumnFamilyHandle defaultHandle;
@@ -39,6 +45,23 @@ public class RocksKVStore implements PerKVStore {
     public RocksKVStore(String dbDirPath) {
         this.dbDirPath = dbDirPath;
         openRocksDB(dbDirPath);
+        initMaxValue();
+    }
+
+    private void initMaxValue(){
+        try {
+            maxKey = db.get(ByteUtils.stringToBytes(MAX_VALUE));
+        }catch (RocksDBException e){
+            log.warn(e.getMessage());
+        }
+        maxKey = maxKey == null ? new byte[0] : maxKey;
+    }
+
+    private void updateMaxValue(byte[] key) throws RocksDBException{
+        if (ByteUtils.compare(key, maxKey) > 0){
+            maxKey = key;
+            db.put(ByteUtils.stringToBytes(MAX_VALUE), maxKey);
+        }
     }
 
     @Override
@@ -59,6 +82,7 @@ public class RocksKVStore implements PerKVStore {
         writeLock.lock();
         try {
             db.put(key, value);
+            updateMaxValue(key);
             return true;
         }catch (RocksDBException e){
             log.warn(e.getMessage());
@@ -106,6 +130,7 @@ public class RocksKVStore implements PerKVStore {
         return res;
     }
 
+
     @Override
     public Lock getWriteLock() {
         return writeLock;
@@ -131,7 +156,7 @@ public class RocksKVStore implements PerKVStore {
         File snapshotDir = new File(snapshotDirPath);
         if (!snapshotDir.exists()) return;
 
-        writeLock.lock();
+        readLock.lock();
         try {
             closeRocksDB();
             File dbDir = new File(dbDirPath);
@@ -139,7 +164,7 @@ public class RocksKVStore implements PerKVStore {
             FileUtils.copyDirectory(snapshotDir, dbDir);
             openRocksDB(dbDirPath);
         }finally {
-            writeLock.unlock();
+            readLock.unlock();
         }
     }
 
@@ -249,7 +274,7 @@ public class RocksKVStore implements PerKVStore {
                 final File sstFile = entry.getValue();
                 final ColumnFamilyHandle columnFamilyHandle = findColumnFamilyHandle(sstColumnFamily);
                 try (final IngestExternalFileOptions ingestOptions = new IngestExternalFileOptions()) {
-                    if (FileUtils.sizeOf(sstFile) == 0L) {
+                    if (!sstFile.exists() || FileUtils.sizeOf(sstFile) == 0L) {
                         return;
                     }
                     final String filePath = sstFile.getAbsolutePath();
@@ -263,6 +288,114 @@ public class RocksKVStore implements PerKVStore {
             readLock.unlock();
         }
     }
+
+    @Override
+    public long getApproximateKeysInRange(final byte[] startKey, final byte[] endKey) {
+        // TODO This is a sad code, the performance is too damn bad
+
+        final Snapshot snapshot = this.db.getSnapshot();
+        try (final ReadOptions readOptions = new ReadOptions()) {
+            readOptions.setSnapshot(snapshot);
+            try (final RocksIterator it = this.db.newIterator(readOptions)) {
+                if (startKey == null) {
+                    it.seekToFirst();
+                } else {
+                    it.seek(startKey);
+                }
+                long approximateKeys = 0;
+                for (;;) {
+                    // The accuracy is 100, don't ask more
+                    for (int i = 0; i < 100; i++) {
+                        if (!it.isValid()) {
+                            return approximateKeys;
+                        }
+                        it.next();
+                        ++approximateKeys;
+                    }
+                    if (endKey != null && ByteUtils.compare(it.key(), endKey) >= 0) {
+                        return approximateKeys;
+                    }
+                }
+            }
+        } finally {
+            // Nothing to release, rocksDB never own the pointer for a snapshot.
+            snapshot.close();
+            // The pointer to the snapshot is released by the database instance.
+            this.db.releaseSnapshot(snapshot);
+        }
+    }
+/*
+    private double getAverageKVSize() throws RocksDBException{
+        Slice slice = new Slice(ByteUtils.BYTE_ARRAY_MIN_VALUE);
+        Slice slice1 = new Slice(maxKey);
+        Range range = new Range(slice, slice1);
+        long approximateSize = db.getApproximateSizes(Collections.singletonList(range),
+                SizeApproximationFlag.INCLUDE_FILES, SizeApproximationFlag.INCLUDE_MEMTABLES)[0];
+        long kvNum = Long.valueOf(db.getProperty("rocksdb.estimate-num-keys"));
+        return approximateSize / (double)kvNum;
+    }
+
+    @Override
+    *//**
+     * 首先获取整个db的估计kv数量以及所占磁盘大小
+     * 然后根据平均kv大小和范围内的所有kv总大小，计算出范围内的kv数量
+     *//*
+    public long getApproximateKeysInRange(byte[] startKey, byte[] endKey) {
+        Slice start = new Slice(startKey);
+        if (endKey == ByteUtils.BYTE_ARRAY_MAX_VALUE) endKey = maxKey;
+        Slice end = new Slice(endKey);
+        Range range = new Range(start, end);
+        long approximateSize = db.getApproximateSizes(Collections.singletonList(range),
+                SizeApproximationFlag.INCLUDE_FILES, SizeApproximationFlag.INCLUDE_MEMTABLES)[0];
+        long approximateNum = - 1;
+        try {
+            approximateNum = (long)(approximateSize / getAverageKVSize());
+        }catch (RocksDBException e){
+            log.warn(e.getMessage());
+        }
+        return approximateNum;
+    }*/
+
+
+    @Override
+    public byte[] jumpOver(final byte[] startKey, final long distance) {
+        readLock.lock();
+        final Snapshot snapshot = this.db.getSnapshot();
+        try (final ReadOptions readOptions = new ReadOptions()) {
+            readOptions.setSnapshot(snapshot);
+            try (final RocksIterator it = this.db.newIterator(readOptions)) {
+                if (startKey == null) {
+                    it.seekToFirst();
+                } else {
+                    it.seek(startKey);
+                }
+                long approximateKeys = 0;
+                for (;;) {
+                    byte[] lastKey = null;
+                    if (it.isValid()) {
+                        lastKey = it.key();
+                    }
+                    // The accuracy is 100, don't ask more
+                    for (int i = 0; i < 100; i++) {
+                        if (!it.isValid()) {
+                            return lastKey;
+                        }
+                        it.next();
+                        if (++approximateKeys >= distance) {
+                            return it.key();
+                        }
+                    }
+                }
+            }
+        } finally {
+            // Nothing to release, rocksDB never own the pointer for a snapshot.
+            snapshot.close();
+            // The pointer to the snapshot is released by the database instance.
+            this.db.releaseSnapshot(snapshot);
+            readLock.unlock();
+        }
+    }
+
 
     private void openRocksDB(String dirPath){
         DBOptions dbOptions = new DBOptions();

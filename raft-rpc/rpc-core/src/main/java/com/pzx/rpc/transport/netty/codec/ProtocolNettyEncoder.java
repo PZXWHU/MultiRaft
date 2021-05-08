@@ -21,7 +21,11 @@ public class ProtocolNettyEncoder extends MessageToByteEncoder {
 
     @Override
     protected void encode(ChannelHandlerContext channelHandlerContext, Object msg, ByteBuf out) throws Exception {
-
+        /*if (msg instanceof RpcRequest){
+            RpcRequest rpcRequest = (RpcRequest)msg;
+            if (rpcRequest.getMethodName().equals("regionHeartbeat"))
+                System.out.println("开始序列化：" + msg);
+        }*/
         byte protocolVersion = ProtocolConstants.NEWEST_VERSION;
         ProtocolCoDec protocolCoDec = ProtocolCoDec.getByVersion(protocolVersion);
         byte[] protocolBytes = protocolCoDec.encode(msg, serializer);
