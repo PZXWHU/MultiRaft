@@ -1,126 +1,27 @@
-# 项目概述
-本项目是Raft分布式一致性协议的JAVA简易实现。RPC框架使用的是根据自己所写的简易RPC框架[MyRPC](https://github.com/PZXWHU/MyRPC)的改进版。
+## 项目概述
 
-## 项目实现功能
-1. leader选举
-2. 日志复制
-3. 集群成员变更
-4. 快照功能
+本项目使用java语言基于[MyRpc](https://github.com/PZXWHU/MyRPC)和[MyRaft](https://github.com/PZXWHU/MyRaft)项目之上实现MultiRaft。本项目是个人对Raft、MultiRaft的理解与实践尝试，无法保证高效率和bug-free。
 
-## 功能测试
+**什么是MulitRaft ？**
 
-[raft test](./raft-test/README.md)
+引用Cockroach对Multi-Raft的定义
 
+In [CockroachDB](https://github.com/cockroachdb/cockroach), we use the [Raft consensus algorithm](https://raftconsensus.github.io/) to ensure that your data remains consistent even when machines fail. In most systems that use Raft, such as [etcd](https://github.com/coreos/etcd) and [Consul](https://www.consul.io/), the entire system is one Raft consensus group. In CockroachDB, however, the data is divided into *ranges*, each with its own consensus group. This means that each node may be participating in hundreds of thousands of consensus groups. This presents some unique challenges, which we have addressed by introducing a layer on top of Raft that we call [MultiRaft](https://github.com/cockroachdb/cockroach/blob/8187c2551352a6c28eba021effaebcbfe523d78c/docs/RFCS/20151213_dismantle_multiraft.md).
 
+## 核心功能实现
 
-## raft论文解读
+### Raft数据存储
 
-[raft paper](./doc/raft.pdf)
+### 元数据存储
 
-[raft paper read](./doc/raft-paper-read.md)
+### 心跳设计
 
-## 项目参考
-https://juejin.im/post/6844903759982624781
-https://github.com/stateIs0/lu-raft-kv
-https://github.com/maemual/raft-zh_cn/blob/master/raft-zh_cn.md
-https://github.com/wenweihu86/raft-java
+### region分裂
 
+### region查找
 
-# 项目使用
+### 领导者转移
 
-## Raft节点配置文件
+### 副本增加
 
-```java
-
-
-{
-  "serverId" : 1, //节点ID，不能是0
-  "raftHome" : "./raftHome1",//节点主目录，日志、快照储存位置
-  "clusterAddress" : {//集群中所有节点的ID和地址
-      "1" : "127.0.0.1:9999",
-      "2" : "127.0.0.1:8999",
-      "3" : "127.0.0.1:7999"
-  }
-    /*
-   "int electionTimeoutMilliseconds" : 3000,
-
-    "heartbeatPeriodMilliseconds" : 400,
-
-    "snapshotPeriodSeconds" : 3600,
-
-    "snapshotMinLogSize" : 100 * 1024 * 1024,
-
-    "maxLogEntriesPerRequest: : 50,
-
-    "maxAwaitTimeout: : 2000,
-
-    "raftConsensusThreadNum: : 20,
-
-    "asyncWrite" : false
-     */
-
-}
-
-```
-
-
-
-## Raft节点启动
-
-```java
-String configPath = "config.json";
-RaftNode raftNode = new RaftNode(configPath);
-raftNode.start();
-```
-
-## Raft客户端使用
-
-### KVDatabase数据库操作
-
-#### 创建服务代理
-
- ```java
-ProxyConfig proxyConfig = new ProxyConfig().setDirectServerUrl("127.0.0.1:7999").setInvokeType(InvokeType.SYNC);//setDirectServerUrl设置集群中任意节点地址
-RaftKVClientService raftKVClientService = proxyConfig.getProxy(RaftKVClientService.class);
- ```
-
-#### 设置数据
-
-```java
-
-ClientKVResponse KVClientResponse = raftKVClientService.operateKV(ClientKVRequest.builder().type(ClientKVRequest.PUT).key("pzx").value("sx").build());
-System.out.println(KVClientResponse);
-```
-
-#### 获取数据
-
-```java
-ClientKVResponse KVClientResponse = raftKVClientService.operateKV(ClientKVRequest.builder().type(ClientKVRequest.GET).key("pzx").build());
-System.out.println(KVClientResponse);
-```
-
-### 集群节点变更
-
-#### 创建服务代理
-
-```java
-ProxyConfig proxyConfig = new ProxyConfig().setDirectServerUrl("127.0.0.1:9999").setInvokeType(InvokeType.SYNC);
-RaftClusterMembershipChangeService raftClusterMembershipChangeService = proxyConfig.getProxy(RaftClusterMembershipChangeService.class);
-```
-
-#### 添加节点
-
-```java
-ClusterMembershipChangeRequest request = ClusterMembershipChangeRequest.builder().serverId(4).nodeAddress("127.0.0.1:6999").build();
-ClusterMembershipChangeResponse response = raftClusterMembershipChangeService.addNode(request);
-System.out.println(response);
-```
-
-#### 删除节点
-
-```java
-ClusterMembershipChangeRequest request = ClusterMembershipChangeRequest.builder().serverId(1).nodeAddress("127.0.0.1:9999").build();
-ClusterMembershipChangeResponse response = raftClusterMembershipChangeService.removeNode(request);
-System.out.println(response);
-```
-
+### 网络通讯合并
